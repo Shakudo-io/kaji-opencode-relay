@@ -17,7 +17,8 @@ import { SyncStore } from "../src/store"
 import { HeadlessRouter } from "../src/router"
 import { DebugAdapter } from "../src/debug/adapter"
 import { ConsoleRenderer } from "../src/debug/renderer"
-import { createFilePartInputFromBuffer } from "../src/files"
+import { createFilePartInput, createFilePartInputFromBuffer } from "../src/files"
+import { join } from "path"
 
 const SERVER_URL = process.env.LIVE_TEST_URL ?? "http://localhost:4096"
 const WAIT_MS = 60_000
@@ -82,15 +83,12 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
   test("1. Send image file to LLM and verify it processes it", async () => {
     adapterEvents.length = 0
 
-    const redPixelPng = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
-      "base64",
-    )
-    const filePart = createFilePartInputFromBuffer(redPixelPng, "red-pixel.png", "image/png")
+    const imagePath = join(import.meta.dir, "fixtures", "test-image.png")
+    const filePart = await createFilePartInput(imagePath)
 
     await client.promptWithFiles(
       sessionID,
-      "I've attached an image. What color is the single pixel in this image? Just say the color.",
+      "I've attached an image. Describe what you see in this image in one sentence.",
       [filePart],
     )
 
@@ -112,8 +110,8 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
       completed,
       messageCount: messages.length,
       partTypes: parts.map((p) => p.type),
-      textContent: textContent.slice(0, 300),
-      mentionsRed: textContent.toLowerCase().includes("red"),
+      textContent: textContent.slice(0, 500),
+      imageFile: "tests/fixtures/test-image.png (1024x1024, red circle on white)",
     })
 
     expect(completed).toBe(true)
@@ -157,34 +155,45 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
     expect(completed).toBe(true)
   })
 
-  test("3. Verify reasoning parts appear in store", async () => {
+  test("3. Verify reasoning/thinking parts with GLM-5 model override", async () => {
     adapterEvents.length = 0
 
-    await store.session.sync(client.sdk, sessionID)
-    const messages = store.messages(sessionID)
+    await client.prompt(
+      sessionID,
+      "What is 17 * 23? Show your work.",
+      { model: { providerID: "openrouter", modelID: "z-ai/glm-5" } },
+    )
 
-    const allPartTypes = new Set<string>()
-    for (const msg of messages) {
-      const parts = store.parts(msg.id)
-      for (const part of parts) {
-        allPartTypes.add(part.type)
-      }
+    const deadline = Date.now() + WAIT_MS
+    while (Date.now() < deadline) {
+      if (adapterEvents.some((e) => e.method === "onAssistantMessageComplete")) break
+      await new Promise((r) => setTimeout(r, 300))
     }
 
-    const hasReasoning = allPartTypes.has("reasoning")
-    const allTypes = [...allPartTypes]
+    const completed = adapterEvents.some((e) => e.method === "onAssistantMessageComplete")
+    const messages = store.messages(sessionID)
+    const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1)
+    const parts = lastAssistant ? store.parts(lastAssistant.id) : []
 
-    log("reasoning-parts", true, {
+    const reasoningParts = parts.filter((p) => p.type === "reasoning")
+    const textParts = parts.filter((p) => p.type === "text")
+    const reasoningContent = reasoningParts.map((p) => (p as Record<string, unknown>).text as string).join("")
+    const textContent = textParts.map((p) => (p as Record<string, unknown>).text as string).join("")
+
+    log("reasoning-with-glm5", completed, {
       sessionID,
-      hasReasoningParts: hasReasoning,
-      allPartTypesObserved: allTypes,
-      messageCount: messages.length,
-      note: hasReasoning
-        ? "Reasoning parts found in store — model supports thinking"
-        : "No reasoning parts — model may not support thinking, or thinking was not triggered. Check allPartTypesObserved for what was returned.",
+      completed,
+      modelUsed: "openrouter/z-ai/glm-5",
+      partTypes: parts.map((p) => p.type),
+      hasReasoningParts: reasoningParts.length > 0,
+      reasoningPartCount: reasoningParts.length,
+      reasoningContent: reasoningContent.slice(0, 500),
+      reasoningLength: reasoningContent.length,
+      textContent: textContent.slice(0, 500),
+      textLength: textContent.length,
     })
 
-    expect(allTypes.length).toBeGreaterThan(0)
+    expect(completed).toBe(true)
   })
 
   test("4. Verify debug adapter renders all part types", async () => {
