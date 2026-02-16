@@ -226,14 +226,18 @@ export class ConsoleRenderer {
     this.render("SUBTASK", `agent=${agent}, "${desc}"${modelStr}`, { sessionID, agent, description })
   }
 
-  subtaskRunning(sessionID: string, agentType: string, description: string, status: string): void {
+  subtaskRunning(sessionID: string, agentType: string, description: string, status: string, childSessionId?: string): void {
     const desc = description.length > 60 ? description.slice(0, 60) + "..." : description
-    this.render("SUBTASK", `🕵️ ${agentType} — "${desc}" (${status})`, { sessionID, agentType, description, status })
+    const childStr = childSessionId ? ` [${childSessionId.slice(0, 12)}]` : ""
+    this.render("SUBTASK", `🕵️ ${agentType} — "${desc}" (${status})${childStr}`, { sessionID, agentType, description, status, childSessionId })
   }
 
-  subtaskComplete(sessionID: string, agentType: string, description: string, elapsed: string): void {
+  subtaskComplete(sessionID: string, agentType: string, description: string, elapsed: string, childSessionId?: string, output?: string): void {
     const desc = description.length > 60 ? description.slice(0, 60) + "..." : description
-    this.render("SUBTASK", `✅ ${agentType} — "${desc}" (${elapsed})`, { sessionID, agentType, description, elapsed })
+    const parts = [`✅ ${agentType} — "${desc}"`]
+    if (elapsed) parts.push(`(${elapsed})`)
+    const childStr = childSessionId ? ` [${childSessionId.slice(0, 12)}]` : ""
+    this.render("SUBTASK", `${parts.join(" ")}${childStr}`, { sessionID, agentType, description, elapsed, childSessionId, outputLength: output?.length })
   }
 
   private formatCost(cost: number): string {

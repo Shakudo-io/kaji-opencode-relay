@@ -127,15 +127,22 @@ export class DebugAdapter implements ChannelAdapter {
     if (!state) return
     const status = state.status as string ?? "pending"
     const input = state.input as Record<string, unknown> | undefined
-    const agentType = (input?.subagent_type ?? input?.category ?? "unknown") as string
-    const description = (input?.description ?? input?.prompt ?? "") as string
+    const metadata = state.metadata as Record<string, unknown> | undefined
+    const title = state.title as string | undefined
     const time = state.time as { start?: number; end?: number } | undefined
 
-    if (status === "completed" && time?.start && time?.end) {
-      const elapsed = ((time.end - time.start) / 1000).toFixed(1)
-      this.renderer.subtaskComplete(sessionID, agentType, description, `${elapsed}s`)
+    const agentType = (metadata?.agent ?? input?.subagent_type ?? input?.category ?? "task") as string
+    const description = (title ?? input?.description ?? input?.prompt ?? "") as string
+    const childSessionId = metadata?.sessionId as string | undefined
+
+    if (status === "pending" && !description) return
+
+    if (status === "completed") {
+      const output = state.output as string | undefined
+      const elapsed = time?.start && time?.end ? `${((time.end - time.start) / 1000).toFixed(1)}s` : ""
+      this.renderer.subtaskComplete(sessionID, agentType, description, elapsed, childSessionId, output)
     } else {
-      this.renderer.subtaskRunning(sessionID, agentType, description, status)
+      this.renderer.subtaskRunning(sessionID, agentType, description, status, childSessionId)
     }
   }
 
