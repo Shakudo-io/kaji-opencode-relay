@@ -1,19 +1,11 @@
 export namespace Binary {
-  export function search<T>(
-    array: T[],
-    id: string,
-    compare: (item: T) => string,
-  ): { found: boolean; index: number } {
+  export function search<T>(array: T[], id: string, compare: (item: T) => string): { found: boolean; index: number } {
     let left = 0
     let right = array.length - 1
 
     while (left <= right) {
       const mid = Math.floor((left + right) / 2)
-      const midItem = array[mid]
-      if (midItem === undefined) {
-        return { found: false, index: left }
-      }
-      const midId = compare(midItem)
+      const midId = compare(array[mid]!)
 
       if (midId === id) {
         return { found: true, index: mid }
@@ -34,12 +26,7 @@ export namespace Binary {
 
     while (left < right) {
       const mid = Math.floor((left + right) / 2)
-      const midItem = array[mid]
-      if (midItem === undefined) {
-        right = mid
-        continue
-      }
-      const midId = compare(midItem)
+      const midId = compare(array[mid]!)
 
       if (midId < id) {
         left = mid + 1
