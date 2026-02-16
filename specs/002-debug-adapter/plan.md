@@ -32,7 +32,7 @@ kaji-opencode-relay/
 ```
 CLI (bin/debug.ts)
   │
-  ├── Parse flags (--url, --interactive, --json, --verbose)
+  ├── Parse flags (--url, --session, --interactive, --json, --verbose)
   │
   ├── Create HeadlessClient(config)
   ├── Create SyncStore(client)
@@ -45,7 +45,14 @@ CLI (bin/debug.ts)
   │   → store.bootstrap()
   │   → print "Connected to OpenCode at <url>"
   │
-  └── Wait for events (runs until Ctrl+C)
+  ├── Subscribe to client lifecycle events
+  │   → "disconnected" / "reconnecting" / "reconnected" → print status
+  │
+  ├── Start stdin input loop (readline)
+  │   → On line: if no session → client.createSession() then client.prompt()
+  │   →          if session exists → client.prompt(sessionID, text)
+  │
+  └── Wait for events + stdin (runs until Ctrl+C)
 ```
 
 ### Output Format

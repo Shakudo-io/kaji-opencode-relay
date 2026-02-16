@@ -23,6 +23,9 @@ This adapter renders to **stdout** with structured, human-readable output — no
 
 ### Session 2026-02-16
 - Q: How should the debug adapter claim sessions? → A: Auto-claim all sessions by default. Add optional `--session <id>` flag to filter to a specific session.
+- Q: Should the debug CLI allow sending prompts? → A: Yes — observer + prompt input + session create. Fully self-contained test harness.
+- Q: How should `--verbose` and `--json` interact? → A: Combined. In JSON mode, `--verbose` adds a `rawEvent` field to each JSON line. In text mode, it prints the raw SSE event below the formatted line.
+- Q: What happens when the server disconnects? → A: Print `[DISCONNECTED]` / `[RECONNECTING]` / `[RECONNECTED]` status lines. Rely on HeadlessClient's built-in auto-reconnection.
 
 ---
 
@@ -43,6 +46,19 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - When todos update, it prints the todo list
 - When the session goes idle, it prints "Session idle — waiting for input"
 - All output is prefixed with timestamps and event type tags
+- When the server disconnects, it prints `[DISCONNECTED]` / `[RECONNECTING]` / `[RECONNECTED]` status lines
+
+### US4: Send prompts and create sessions from the CLI [P1]
+**As a** developer testing the relay end-to-end  
+**I want to** type prompts directly into the debug CLI  
+**So that** I can drive a full OpenCode session without needing a separate TUI
+
+**Acceptance Scenarios:**
+- When I type text and press Enter, it sends the text as a prompt to the current session
+- If no session exists, typing input creates a new session automatically, then sends the prompt
+- If `--session <id>` is specified, prompts go to that session
+- If multiple sessions exist and none is specified, prompts go to the most recently active session
+- Stdin prompt input coexists with event output (input prompt line, output events above)
 
 ### US2: Use as a template for new adapters [P1]
 **As a** developer building a new channel adapter  
@@ -75,7 +91,10 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Accept flags: `--url <server-url>`, `--directory <path>`, `--session <id>`, `--interactive`, `--verbose`, `--json`
 - `--session <id>` filters to a specific session (default: claim all sessions, show all events)
 - `--json` mode outputs NDJSON (newline-delimited JSON) — one event per line — for pipe-ability
-- `--verbose` shows raw SSE events in addition to formatted output
+- `--verbose` in text mode: prints the raw SSE event below each formatted line. In JSON mode: adds a `rawEvent` field to each JSON line. Both flags can be combined.
+- Accepts typed input from stdin as prompts (send to the current/only session)
+- Can create new sessions: typing input when no session exists creates one automatically
+- On server disconnect: prints `[DISCONNECTED]` / `[RECONNECTING]` / `[RECONNECTED]` status. Relies on HeadlessClient auto-reconnection — does not exit.
 
 ### FR2: Console Renderer
 - All output to stdout with structured format:
@@ -114,6 +133,9 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Auto-response policies for permissions/questions
 - Interactive stdin mode
 - NDJSON output mode
+- Stdin prompt input (send user messages to OpenCode)
+- Auto-create session when none exists
+- Connection lifecycle display (disconnect/reconnect status)
 
 ### Out of Scope
 - Persistence of any kind

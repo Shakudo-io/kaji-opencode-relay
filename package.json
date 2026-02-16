@@ -9,7 +9,11 @@
     "./types": "./dist/types.js",
     "./adapter": "./dist/adapter.js",
     "./store": "./dist/store.js",
-    "./schemas": "./dist/schemas.js"
+    "./schemas": "./dist/schemas.js",
+    "./debug": "./dist/debug/adapter.js"
+  },
+  "bin": {
+    "kaji-opencode-relay-debug": "./bin/debug.ts"
   },
   "types": "./dist/index.d.ts",
   "main": "./dist/index.js",
@@ -18,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting",
+    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

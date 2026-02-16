@@ -35,6 +35,7 @@
   - If `--session` provided, claim only that session. Otherwise, claim all sessions (register as default adapter).
   - Create HeadlessClient → SyncStore → DebugAdapter → HeadlessRouter
   - Register adapter, connect, print status
+  - Subscribe to HeadlessClient lifecycle events (`connected`, `disconnected`, `reconnecting`, `reconnected`) → render via ConsoleRenderer
   - Handle SIGINT for clean shutdown
   - File: `src/debug/cli.ts`
 
@@ -43,6 +44,16 @@
   - Import and run CLI
   - Add to `package.json` "bin" field
   - File: `bin/debug.ts`, `package.json`
+
+- [ ] T010 [US4] Implement stdin prompt input and session creation
+  - Start readline interface on stdin after bootstrap
+  - On line input: send as prompt to current session via `client.prompt(sessionID, text)`
+  - If no session exists: auto-create via `client.createSession()`, then prompt
+  - If `--session <id>` specified: always target that session
+  - If multiple sessions and none specified: target most recently active (last in store.state.session)
+  - Coexist with event output (render events above, prompt input at bottom)
+  - In `--json` mode: emit `{"type":"prompt","sessionID":"...","text":"..."}` for each prompt sent
+  - File: `src/debug/cli.ts` (update)
 
 ---
 
@@ -90,8 +101,8 @@
 | Phase | Tasks | Depends On |
 |-------|-------|------------|
 | 1. Core | T001-T002 | 001-headless-core complete |
-| 2. CLI | T003-T004 | T001, T002 |
-| 3. Interactive | T005-T006 | T003 |
+| 2. CLI | T003-T004, T010 | T001, T002 |
+| 3. Interactive | T005-T006 | T003, T010 |
 | 4. Testing | T007-T009 | T005, T006 |
 
-**Total: 9 tasks**
+**Total: 10 tasks**
