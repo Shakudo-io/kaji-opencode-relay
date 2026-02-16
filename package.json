@@ -18,7 +18,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --format esm --target node",
+    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting",
+    "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "peerDependencies": {
@@ -28,6 +29,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@opencode-ai/sdk": "^1.2.5",
     "bun-types": "latest",
     "typescript": "^5.4.5"
   }
