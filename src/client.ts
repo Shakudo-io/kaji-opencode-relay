@@ -178,9 +178,12 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     return this.sdk.session.create(options)
   }
 
-  async prompt(sessionID: string, text: string, options?: SessionPromptOptions): Promise<Message> {
-    const input = { text, ...(options ?? {}) }
-    return this.sdk.session.prompt(sessionID, input)
+  async prompt(sessionID: string, text: string, options?: SessionPromptOptions): Promise<unknown> {
+    return this.sdk.session.prompt({
+      sessionID,
+      parts: [{ id: `part_${Date.now()}`, type: "text" as const, text }],
+      ...(options ?? {}),
+    })
   }
 
   async abort(sessionID: string): Promise<Session> {

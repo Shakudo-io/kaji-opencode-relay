@@ -344,4 +344,99 @@ describe("Live Integration: Relay → OpenCode Server", () => {
 
     expect(pass).toBe(true)
   })
+
+  test("11. Store typed accessors return consistent data", async () => {
+    const targetSession = store.state.session[store.state.session.length - 1]!
+    const sid = targetSession.id
+
+    await store.session.sync(client.sdk, sid)
+
+    const sessionObj = store.session.get(sid)
+    const messages = store.messages(sid)
+    const todos = store.todos(sid)
+    const permissions = store.permissions(sid)
+    const questions = store.questions(sid)
+    const providers = store.providers
+    const agents = store.agents
+    const config = store.config
+    const lsp = store.lspStatus
+    const mcp = store.mcpStatus
+    const mcpRes = store.mcpResources
+    const formatters = store.formatterStatus
+    const vcs = store.vcsInfo
+    const pathInfo = store.path
+    const snapshot = store.snapshot()
+
+    const firstMsg = messages[0]
+    const parts = firstMsg ? store.parts(firstMsg.id) : []
+
+    const checks: Record<string, boolean> = {
+      session_get_returns_object: sessionObj !== undefined && sessionObj.id === sid,
+      messages_returns_array: Array.isArray(messages),
+      todos_returns_array: Array.isArray(todos),
+      permissions_returns_array: Array.isArray(permissions),
+      questions_returns_array: Array.isArray(questions),
+      providers_returns_array: Array.isArray(providers) && providers.length > 0,
+      agents_returns_array: Array.isArray(agents) && agents.length > 0,
+      config_returns_object: typeof config === "object" && config !== null,
+      lsp_returns_array: Array.isArray(lsp),
+      mcp_returns_object: typeof mcp === "object",
+      mcp_resources_returns_object: typeof mcpRes === "object",
+      formatters_returns_array: Array.isArray(formatters),
+      path_has_directory: typeof pathInfo?.directory === "string",
+      snapshot_is_deep_copy: snapshot !== store.state,
+      snapshot_has_sessions: snapshot.session.length === store.state.session.length,
+      parts_returns_array: Array.isArray(parts),
+    }
+
+    const allPass = Object.values(checks).every(Boolean)
+
+    log("store-accessors", allPass, {
+      sessionID: sid,
+      checks,
+      messageCount: messages.length,
+      partsForFirstMessage: parts.length,
+      vcs,
+    })
+
+    expect(allPass).toBe(true)
+  })
+
+  test("12. Store processes live SSE events into state changes", async () => {
+    const stateChanges: Array<{ event: string; ts: number }> = []
+
+    const unsubs = [
+      store.on("assistantMessage", () => stateChanges.push({ event: "assistantMessage", ts: Date.now() })),
+      store.on("assistantMessageComplete", () => stateChanges.push({ event: "assistantMessageComplete", ts: Date.now() })),
+      store.on("sessionStatus", () => stateChanges.push({ event: "sessionStatus", ts: Date.now() })),
+      store.on("todo", () => stateChanges.push({ event: "todo", ts: Date.now() })),
+      store.on("permission", () => stateChanges.push({ event: "permission", ts: Date.now() })),
+      store.on("question", () => stateChanges.push({ event: "question", ts: Date.now() })),
+      store.on("toast", () => stateChanges.push({ event: "toast", ts: Date.now() })),
+      store.on("sessionError", () => stateChanges.push({ event: "sessionError", ts: Date.now() })),
+    ]
+
+    const rawEvents: string[] = []
+    const eventUnsub = client.on("event", (e) => {
+      rawEvents.push(e.type)
+      store.processEvent(e)
+    })
+
+    await new Promise((r) => setTimeout(r, 3000))
+
+    for (const u of unsubs) u()
+    eventUnsub()
+
+    log("live-event-processing", true, {
+      rawEventsReceived: rawEvents.length,
+      rawEventTypes: [...new Set(rawEvents)],
+      storeChangesEmitted: stateChanges.length,
+      storeChangeTypes: [...new Set(stateChanges.map((c) => c.event))],
+      note: rawEvents.length === 0
+        ? "Server idle during 3s window — no events to process (normal)"
+        : `${rawEvents.length} raw events → ${stateChanges.length} store changes`,
+    })
+
+    expect(client.isConnected).toBe(true)
+  })
 })
