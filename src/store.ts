@@ -599,7 +599,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
     if (this.fullSyncedSessions.has(sessionID)) return
     const [session, messages, todo, diff] = await Promise.all([
       sdk.session.get({ sessionID }, { throwOnError: true }),
-      sdk.session.messages({ sessionID, limit: 100 }),
+      sdk.session.messages({ sessionID }),
       sdk.session.todo({ sessionID }),
       sdk.session.diff({ sessionID }),
     ])
@@ -609,9 +609,37 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
     if (!match.found) this.state.session.splice(match.index, 0, session.data!)
     this.state.todo[sessionID] = todo.data ?? []
     type SessionMessage = { info: Message; parts: Part[] }
-    const messageData = (messages.data ?? []) as SessionMessage[]
-    this.state.message[sessionID] = messageData.map((message) => message.info)
-    for (const message of messageData) {
+    const allMessages = (messages.data ?? []) as SessionMessage[]
+
+    let totalCost = 0
+    const tokenTotals = { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+    for (const message of allMessages) {
+      const msg = message.info as Record<string, unknown>
+      if (msg.role === "assistant") {
+        const cost = typeof msg.cost === "number" ? msg.cost : 0
+        totalCost += cost
+        const tokens = msg.tokens as { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } } | undefined
+        if (tokens) {
+          tokenTotals.input += tokens.input ?? 0
+          tokenTotals.output += tokens.output ?? 0
+          tokenTotals.reasoning += tokens.reasoning ?? 0
+          tokenTotals.cacheRead += tokens.cache?.read ?? 0
+          tokenTotals.cacheWrite += tokens.cache?.write ?? 0
+        }
+      }
+    }
+    this.state.session_cost[sessionID] = totalCost
+    this.state.session_tokens[sessionID] = { ...tokenTotals }
+
+    const recentMessages = allMessages.slice(-100)
+    this.state.message[sessionID] = recentMessages.map((message) => message.info)
+    for (const key of Object.keys(this.state.part)) {
+      const belongsToSession = recentMessages.some((m) => m.info.id === key)
+      if (!belongsToSession && this.state.message[sessionID]?.every((m) => m.id !== key)) {
+        delete this.state.part[key]
+      }
+    }
+    for (const message of recentMessages) {
       this.state.part[message.info.id] = message.parts
     }
     this.state.session_diff[sessionID] = diff.data ?? []
