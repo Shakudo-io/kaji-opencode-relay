@@ -4,7 +4,8 @@
 **Status**: Draft  
 **Created**: 2026-02-16  
 **Priority**: P1 — Validates headless core, serves as template for real adapters  
-**Depends On**: kaji-opencode-relay-001-headless-core
+**Depends On**: kaji-opencode-relay-001-headless-core  
+**Modifies**: Also adds `sessionCost` accumulator and `sessionTokens` to SyncStore (001 change)
 
 ---
 
@@ -27,6 +28,8 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Q: How should `--verbose` and `--json` interact? → A: Combined. In JSON mode, `--verbose` adds a `rawEvent` field to each JSON line. In text mode, it prints the raw SSE event below the formatted line.
 - Q: What happens when the server disconnects? → A: Print `[DISCONNECTED]` / `[RECONNECTING]` / `[RECONNECTED]` status lines. Rely on HeadlessClient's built-in auto-reconnection.
 - Q: Show reasoning/thinking parts by default? → A: Yes, always show `[THINKING]` parts. This is a debug tool.
+- Q: How to compute session aggregate cost? → A: Running total accumulator in the SyncStore. Increments on every `message.updated` for assistant messages. Never resets when old messages evict from the 100-message cap. This is a store-level change (001), not just a debug adapter change.
+- Q: How to trigger subtask delegation in live tests? → A: Direct prompt asking LLM to use the task tool.
 
 ---
 
@@ -76,6 +79,41 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - When the LLM responds with `FilePart` attachments, they are rendered with `[FILE]` tag showing filename, mime, and size
 - The `--json` mode includes the full file data URI in the JSON output
 
+### US6: See cost and token usage per message and session [P1]
+**As a** developer monitoring LLM spending  
+**I want to** see cost and token counts for each assistant response and session totals  
+**So that** I can track spending and optimize prompts
+
+**Acceptance Scenarios:**
+- When an assistant message completes, the debug adapter shows: `[COST] $0.03 | 1,234 in / 567 out / 89 reasoning / 45 cache-read`
+- Session aggregate cost is shown on demand or when session goes idle: `[SESSION] Total: $0.45 | 12,345 tokens`
+- `StepFinishPart` cost/token data is rendered with `[STEP]` tag
+- In `--json` mode, cost and token fields are included on every message/step event
+- Token counts are broken down: input, output, reasoning, cache read, cache write
+
+### US7: See which model is used for each response [P1]
+**As a** developer debugging model routing  
+**I want to** see which LLM model and provider handled each assistant response  
+**So that** I can verify model selection and override behavior
+
+**Acceptance Scenarios:**
+- When an assistant message arrives, the header shows: `[MODEL] anthropic/claude-sonnet-4-20250514`
+- Model info comes from `AssistantMessage.providerID` and `.modelID`
+- If the model changes between messages (e.g., model override), the change is highlighted
+- In `--json` mode, `providerID` and `modelID` are included on every assistant message event
+
+### US8: See subagent/task delegation progress [P1]
+**As a** developer monitoring multi-agent workflows  
+**I want to** see when tasks are delegated to sub-agents and track their progress  
+**So that** I can understand the delegation tree and timing
+
+**Acceptance Scenarios:**
+- When a `task` tool starts running, render: `[SUBTASK] 🕵️ Build — "implement auth module" (running)`
+- When a `SubtaskPart` arrives, render: `[SUBTASK] agent=Build, model=anthropic/claude-sonnet-4, prompt="implement auth..."`
+- When a `task` tool completes, render: `[SUBTASK] ✅ Build — completed (2m 34s, 12 tools) | $0.45`
+- Track child session IDs via `ToolStateRunning.input` and `Session.parentID`
+- In `--json` mode, subtask events include childSessionId, agentType, timing, cost
+
 ### US2: Use as a template for new adapters [P1]
 **As a** developer building a new channel adapter  
 **I want to** copy the debug adapter as a starting point  
@@ -84,7 +122,7 @@ This adapter renders to **stdout** with structured, human-readable output — no
 **Acceptance Scenarios:**
 - The adapter implements every method in the `ChannelAdapter` interface
 - Each method has clear comments explaining what a real adapter should do
-- The code is self-contained in a single file (< 300 lines)
+- The adapter code is self-contained (adapter.ts + renderer.ts)
 - The adapter can be registered with `HeadlessRouter` using the standard API
 
 ### US3: Interactive mode for testing permissions and questions [P2]
@@ -123,7 +161,12 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Diff display shows unified diff format for edit permissions
 - Reasoning/thinking parts rendered with `[THINKING]` tag — shows thinking text content
 - File parts rendered with `[FILE]` tag — shows filename, mime type, and data size (not the full base64)
-- Model info shown when available (provider/model in response metadata)
+- Model info shown on each assistant message: `[MODEL] {providerID}/{modelID}`
+- Cost shown on message completion: `[COST] ${cost} | {input} in / {output} out / {reasoning} reasoning / {cache_read} cache`
+- Session aggregate cost shown when session goes idle: `[SESSION] Total: ${total} | {total_tokens} tokens`
+- StepFinishPart rendered with `[STEP]` tag showing per-step cost/tokens
+- SubtaskPart rendered with `[SUBTASK]` tag showing agent, description, model
+- Task tool (tool name `task`) rendered with `[SUBTASK]` tag showing delegation lifecycle: running → completed with timing and tool count
 
 ### FR3: Auto-Response Policies
 - Configurable via constructor options:
@@ -149,7 +192,10 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Debug adapter implementing full `ChannelAdapter` interface
 - CLI entry point with flag parsing
 - Console output formatting
-- Rendering all part types: text, tool, reasoning/thinking, file
+- Rendering all part types: text, tool, reasoning/thinking, file, subtask
+- Cost and token display per message and session aggregate
+- Model/provider identification per assistant response
+- Subagent/task delegation tracking and progress display
 - File attachment from CLI via `/attach <filepath>` command
 - Auto-response policies for permissions/questions
 - Interactive stdin mode
@@ -182,6 +228,10 @@ This adapter renders to **stdout** with structured, human-readable output — no
 
 - A developer can run the debug adapter against a live OpenCode server and see the full event flow
 - The adapter correctly handles all event types from the headless core
+- Cost/token data is visible for every assistant response
+- Model ID is visible for every assistant response
+- Subtask/delegation events are visible with timing and cost
 - The NDJSON output mode can be piped to `jq` for analysis
 - The interactive mode successfully completes a permission and question flow via stdin
-- The source code is clean enough to serve as a copy-paste template (< 300 lines for the adapter itself)
+- Live tests produce NDJSON output with natural language content that an AI agent can review to verify correctness
+- The adapter code is clean enough to serve as a copy-paste template (adapter.ts + renderer.ts)

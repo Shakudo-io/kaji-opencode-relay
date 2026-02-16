@@ -128,6 +128,88 @@
 
 ---
 
+## Phase 6: Cost/Token Tracking [US6]
+
+- [ ] T016 [US6] Add `sessionCost` and `sessionTokens` running accumulators to SyncStore (001 change)
+  - In `message.updated` handler: when assistant message arrives, accumulate `message.cost` into `state.session_cost[sessionID]`
+  - Accumulate tokens: `state.session_tokens[sessionID]` with `{ input, output, reasoning, cacheRead, cacheWrite }`
+  - Never reset on message eviction — running total survives the 100-message cap
+  - Add store accessors: `store.sessionCost(sessionID)`, `store.sessionTokens(sessionID)`
+  - Emit `"sessionCost"` change event when cost updates
+  - File: `src/store.ts`
+
+- [ ] T017 [US6] Add cost/token rendering to DebugAdapter
+  - In `onAssistantMessage`: when StepFinishPart detected, render `[STEP]` with cost/tokens
+  - In `onAssistantMessageComplete`: render `[COST]` with message cost and token breakdown
+  - Render token breakdown: `{input} in / {output} out / {reasoning} reasoning / {cacheRead} cache`
+  - Format cost as USD: `$0.03`, `$0.003`, etc.
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+- [ ] T018 [US6] Show session aggregate cost on idle
+  - When session status transitions to idle: render `[SESSION] Total: ${cost} | {tokens} tokens`
+  - Read from `store.sessionCost(sessionID)` and `store.sessionTokens(sessionID)`
+  - File: `src/debug/adapter.ts`
+
+---
+
+## Phase 7: Model Display [US7]
+
+- [ ] T019 [US7] Add model identification rendering to DebugAdapter
+  - In `onAssistantMessage`: extract `message.providerID` and `message.modelID`
+  - Render `[MODEL] {providerID}/{modelID}` on first part of each new assistant message
+  - Track last seen model — if it changes between messages, highlight with `[MODEL CHANGED]`
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+---
+
+## Phase 8: Subtask/Subagent Display [US8]
+
+- [ ] T020 [US8] Add subtask part rendering to DebugAdapter
+  - In `onAssistantMessage`: detect `part.type === "subtask"`, render with `[SUBTASK]`
+  - Show: agent name, description (truncated), model if present
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+- [ ] T021 [US8] Add task tool delegation rendering to DebugAdapter
+  - In `onAssistantMessage`: detect `part.type === "tool"` where `part.tool === "task"`
+  - When running: render `[SUBTASK] 🕵️ {agentType} — "{description}" (running)`
+  - When completed: render `[SUBTASK] ✅ {agentType} — completed ({elapsed}, {toolCount} tools) | ${cost}`
+  - Extract agent type from `state.input.subagent_type` or `state.input.category`
+  - Extract timing from `state.time.start` / `state.time.end`
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+---
+
+## Phase 9: Live Tests for New Features [US6, US7, US8]
+
+- [ ] T022 [US6] Live test: cost and token tracking
+  - Send a simple prompt, wait for completion
+  - Verify `AssistantMessage.cost > 0` and `AssistantMessage.tokens` has non-zero values
+  - Verify `store.sessionCost(sessionID) > 0`
+  - Verify `store.sessionTokens(sessionID)` has non-zero input/output
+  - Log full cost/token breakdown in [RESULT] NDJSON for manual review
+  - File: `tests/live-cost-model-subtask.test.ts`
+
+- [ ] T023 [US7] Live test: model identification
+  - Send a prompt with default model, verify `message.modelID` and `message.providerID` are present
+  - Send a prompt with model override (`z-ai/glm-5`), verify different modelID on response
+  - Log both model IDs in [RESULT] NDJSON for manual review
+  - File: `tests/live-cost-model-subtask.test.ts`
+
+- [ ] T024 [US8] Live test: subtask/subagent delegation
+  - Send prompt that triggers task tool: "Use the task tool to delegate a simple research task"
+  - Wait for completion
+  - Verify `SubtaskPart` or `ToolPart` with `tool === "task"` appears in parts
+  - Log subtask details (agent, description, timing, cost) in [RESULT] NDJSON for manual review
+  - File: `tests/live-cost-model-subtask.test.ts`
+
+- [ ] T025 [US6, US7, US8] Live test: verify debug adapter renders new features
+  - Run DebugAdapter with JSON renderer against the test session
+  - Capture adapter output
+  - Verify `[COST]`, `[MODEL]`, `[SUBTASK]` events appear in adapter output
+  - File: `tests/live-cost-model-subtask.test.ts`
+
+---
+
 ## Task Summary
 
 | Phase | Tasks | Depends On |
@@ -137,5 +219,11 @@
 | 3. Interactive | T005-T006 | T003, T010 |
 | 4. Testing | T007-T009 | T005, T006 |
 | 5. Reasoning/Files/Model | T011-T015 | T001, T003, 001-T031 (file utils) |
+| 6. Cost/Token | T016-T018 | T001, store.ts |
+| 7. Model Display | T019 | T001, T017 |
+| 8. Subtask/Subagent | T020-T021 | T001 |
+| 9. Live Tests | T022-T025 | T016-T021 |
 
-**Total: 15 tasks**
+**Total: 25 tasks**
+**New tasks in this update: T016-T025 (10 tasks)**
+**Phases 1-5 already implemented. Phases 6-9 are new.**

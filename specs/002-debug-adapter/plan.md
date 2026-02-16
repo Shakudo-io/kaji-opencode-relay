@@ -72,9 +72,42 @@ CLI (bin/debug.ts)
 [10:30:21] [STATUS]       ses_abc1 → idle
 ```
 
+**New output types (Phases 6-8):**
+```
+[10:30:18] [MODEL]        anthropic/claude-sonnet-4-20250514
+[10:30:19] [STEP]         $0.01 | 456 in / 123 out / 0 reasoning / 200 cache
+[10:30:21] [COST]         $0.03 | 1,234 in / 567 out / 89 reasoning / 45 cache
+[10:30:21] [SESSION]      Total: $0.45 | 12,345 tokens
+[10:30:22] [SUBTASK]      🕵️ Build — "implement auth module" (running)
+[10:30:45] [SUBTASK]      ✅ Build — completed (23s, 4 tools) | $0.12
+```
+
 **NDJSON mode** (`--json`):
 ```json
 {"ts":"2026-02-16T10:30:15Z","type":"connected","url":"http://localhost:4096"}
 {"ts":"2026-02-16T10:30:17Z","type":"message","sessionID":"ses_abc1","role":"user","text":"List all TypeScript files"}
-{"ts":"2026-02-16T10:30:18Z","type":"permission","sessionID":"ses_abc1","permission":"bash","reply":"once"}
+{"ts":"2026-02-16T10:30:18Z","type":"model","sessionID":"ses_abc1","providerID":"anthropic","modelID":"claude-sonnet-4-20250514"}
+{"ts":"2026-02-16T10:30:21Z","type":"cost","sessionID":"ses_abc1","cost":0.03,"tokens":{"input":1234,"output":567,"reasoning":89,"cacheRead":45,"cacheWrite":0}}
+{"ts":"2026-02-16T10:30:22Z","type":"subtask","sessionID":"ses_abc1","agentType":"Build","description":"implement auth","status":"running"}
 ```
+
+### Store Changes (Phase 6)
+
+```typescript
+// New fields added to SyncState:
+interface SyncState {
+  // ... existing fields ...
+  session_cost: Record<string, number>           // sessionID → running USD total
+  session_tokens: Record<string, TokenSummary>   // sessionID → running token totals
+}
+
+interface TokenSummary {
+  input: number
+  output: number
+  reasoning: number
+  cacheRead: number
+  cacheWrite: number
+}
+```
+
+Updated in the `message.updated` handler: when an assistant message arrives, accumulate cost and tokens. Never resets on message eviction.

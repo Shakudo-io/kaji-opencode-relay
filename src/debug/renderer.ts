@@ -29,7 +29,7 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   RECONNECTING: "yellow",
   RECONNECTED: "green",
   BOOTSTRAP: "cyan",
-  SESSION: "blue",
+  SESSION: "cyan",
   MESSAGE: "white",
   TEXT: "white",
   TOOL: "magenta",
@@ -44,6 +44,10 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   THINKING: "dim",
   FILE: "cyan",
   MODEL: "blue",
+  "MODEL CHANGED": "yellow",
+  COST: "green",
+  STEP: "dim",
+  SUBTASK: "magenta",
 }
 
 export type RendererOptions = {
@@ -186,7 +190,72 @@ export class ConsoleRenderer {
     this.render("FILE", `${name} (${mime}, ${sizeStr})`, { sessionID, mime, filename, sizeBytes })
   }
 
-  model(sessionID: string, provider: string, modelId: string): void {
-    this.render("MODEL", `${provider}/${modelId}`, { sessionID, provider, modelId })
+  modelInfo(sessionID: string, providerID: string, modelID: string, changed: boolean): void {
+    const tag = changed ? "MODEL CHANGED" : "MODEL"
+    this.render(tag, `${providerID}/${modelID}`, { sessionID, providerID, modelID, changed })
+  }
+
+  messageCost(sessionID: string, cost: number, tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }): void {
+    const costStr = this.formatCost(cost)
+    const tokenStr = tokens ? this.formatTokenBreakdown(tokens) : ""
+    this.render("COST", `${costStr}${tokenStr ? ` | ${tokenStr}` : ""}`, {
+      sessionID, cost,
+      tokens: tokens ? { input: tokens.input ?? 0, output: tokens.output ?? 0, reasoning: tokens.reasoning ?? 0, cacheRead: tokens.cache?.read ?? 0, cacheWrite: tokens.cache?.write ?? 0 } : undefined,
+    })
+  }
+
+  stepCost(sessionID: string, cost: number, tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }): void {
+    const costStr = this.formatCost(cost)
+    const tokenStr = tokens ? this.formatTokenBreakdown(tokens) : ""
+    this.render("STEP", `${costStr}${tokenStr ? ` | ${tokenStr}` : ""}`, { sessionID, cost })
+  }
+
+  sessionSummary(sessionID: string, totalCost: number, tokens: { input: number; output: number; reasoning: number; cacheRead: number; cacheWrite: number }): void {
+    const costStr = this.formatCost(totalCost)
+    const totalTokens = tokens.input + tokens.output + tokens.reasoning + tokens.cacheRead + tokens.cacheWrite
+    const tokenStr = this.formatTokenCount(totalTokens)
+    this.render("SESSION", `Total: ${costStr} | ${tokenStr} tokens`, {
+      sessionID, totalCost, totalTokens,
+      tokens,
+    })
+  }
+
+  subtask(sessionID: string, agent: string, description: string, model?: { providerID?: string; modelID?: string }): void {
+    const desc = description.length > 80 ? description.slice(0, 80) + "..." : description
+    const modelStr = model?.providerID && model?.modelID ? `, model=${model.providerID}/${model.modelID}` : ""
+    this.render("SUBTASK", `agent=${agent}, "${desc}"${modelStr}`, { sessionID, agent, description })
+  }
+
+  subtaskRunning(sessionID: string, agentType: string, description: string, status: string): void {
+    const desc = description.length > 60 ? description.slice(0, 60) + "..." : description
+    this.render("SUBTASK", `🕵️ ${agentType} — "${desc}" (${status})`, { sessionID, agentType, description, status })
+  }
+
+  subtaskComplete(sessionID: string, agentType: string, description: string, elapsed: string): void {
+    const desc = description.length > 60 ? description.slice(0, 60) + "..." : description
+    this.render("SUBTASK", `✅ ${agentType} — "${desc}" (${elapsed})`, { sessionID, agentType, description, elapsed })
+  }
+
+  private formatCost(cost: number): string {
+    if (cost === 0) return "$0.00"
+    if (cost >= 1) return `$${cost.toFixed(2)}`
+    if (cost >= 0.01) return `$${cost.toFixed(2)}`
+    if (cost >= 0.001) return `$${cost.toFixed(3)}`
+    return `$${cost.toFixed(4)}`
+  }
+
+  private formatTokenBreakdown(tokens: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }): string {
+    const parts: string[] = []
+    if (tokens.input) parts.push(`${this.formatTokenCount(tokens.input)} in`)
+    if (tokens.output) parts.push(`${this.formatTokenCount(tokens.output)} out`)
+    if (tokens.reasoning) parts.push(`${this.formatTokenCount(tokens.reasoning)} reasoning`)
+    if (tokens.cache?.read) parts.push(`${this.formatTokenCount(tokens.cache.read)} cache`)
+    return parts.join(" / ")
+  }
+
+  private formatTokenCount(n: number): string {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+    return String(n)
   }
 }

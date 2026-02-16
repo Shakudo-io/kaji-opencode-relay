@@ -51,6 +51,16 @@ export type SyncState = {
   formatter: FormatterStatus[]
   vcs: VcsInfo | undefined
   path: Path
+  session_cost: Record<string, number>
+  session_tokens: Record<string, TokenSummary>
+}
+
+export type TokenSummary = {
+  input: number
+  output: number
+  reasoning: number
+  cacheRead: number
+  cacheWrite: number
 }
 
 type StoreEvents = {
@@ -62,6 +72,7 @@ type StoreEvents = {
   assistantMessageComplete: { sessionID: string; message: Message; parts: Part[] }
   sessionError: { sessionID: string; error: Error }
   toast: { notification: ToastNotification }
+  sessionCost: { sessionID: string; cost: number; tokens: TokenSummary }
   status: { status: SyncStoreStatus }
 }
 
@@ -100,6 +111,8 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       formatter: [],
       vcs: undefined,
       path: { state: "", config: "", worktree: "", directory: "", home: "" },
+      session_cost: {},
+      session_tokens: {},
     }
   }
 
@@ -169,6 +182,14 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
 
   todos(sessionID: string): Todo[] {
     return this.state.todo[sessionID] ?? []
+  }
+
+  sessionCost(sessionID: string): number {
+    return this.state.session_cost[sessionID] ?? 0
+  }
+
+  sessionTokens(sessionID: string): TokenSummary {
+    return this.state.session_tokens[sessionID] ?? { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
   }
 
   async bootstrap(sdk: OpencodeClient): Promise<void> {
@@ -371,6 +392,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
           }
         }
         this.emitAssistantMessage(info, previous)
+        this.accumulateCost(info, previous)
         this.updateDerivedStatus(sessionID)
         break
       }
@@ -500,6 +522,41 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
     if (!last) return "idle"
     if (last.role === "user") return "working"
     return last.time.completed ? "idle" : "working"
+  }
+
+  private accumulateCost(current: Message, previous?: Message): void {
+    if (current.role !== "assistant") return
+    const msg = current as Record<string, unknown>
+    const cost = typeof msg.cost === "number" ? msg.cost : 0
+    const tokens = msg.tokens as { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } } | undefined
+    if (cost === 0 && !tokens) return
+
+    const sessionID = current.sessionID
+    const prevMsg = previous as Record<string, unknown> | undefined
+    const prevCost = typeof prevMsg?.cost === "number" ? prevMsg.cost : 0
+
+    const costDelta = cost - prevCost
+    if (costDelta > 0) {
+      this.state.session_cost[sessionID] = (this.state.session_cost[sessionID] ?? 0) + costDelta
+    }
+
+    if (tokens) {
+      const existing = this.state.session_tokens[sessionID] ?? { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }
+      const prevTokens = (prevMsg?.tokens as typeof tokens) ?? {}
+      const delta = (curr: number | undefined, prev: number | undefined) => Math.max(0, (curr ?? 0) - (prev ?? 0))
+      existing.input += delta(tokens.input, prevTokens.input)
+      existing.output += delta(tokens.output, prevTokens.output)
+      existing.reasoning += delta(tokens.reasoning, prevTokens.reasoning)
+      existing.cacheRead += delta(tokens.cache?.read, prevTokens.cache?.read)
+      existing.cacheWrite += delta(tokens.cache?.write, prevTokens.cache?.write)
+      this.state.session_tokens[sessionID] = existing
+    }
+
+    this.emit("sessionCost", {
+      sessionID,
+      cost: this.state.session_cost[sessionID] ?? 0,
+      tokens: this.state.session_tokens[sessionID] ?? { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+    })
   }
 
   private updateDerivedStatus(sessionID: string): void {

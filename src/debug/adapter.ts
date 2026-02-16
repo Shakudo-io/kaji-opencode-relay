@@ -12,9 +12,11 @@ import type {
   ToastNotification,
 } from "../types"
 import type { ConsoleRenderer } from "./renderer"
+import type { SyncStore } from "../store"
 
 export type DebugAdapterOptions = {
   renderer: ConsoleRenderer
+  store?: SyncStore
   permissionPolicy?: "approve-all" | "reject-all" | "interactive"
   questionPolicy?: "first-option" | "interactive"
   permissionTimeout?: number
@@ -36,6 +38,7 @@ export class DebugAdapter implements ChannelAdapter {
   }
 
   private readonly renderer: ConsoleRenderer
+  private readonly store?: SyncStore
   private readonly permissionPolicy: "approve-all" | "reject-all" | "interactive"
   private readonly questionPolicy: "first-option" | "interactive"
   private readonly onInteractivePermission?: (sessionID: string, request: PermissionRequest) => Promise<PermissionReply>
@@ -43,14 +46,30 @@ export class DebugAdapter implements ChannelAdapter {
 
   constructor(options: DebugAdapterOptions) {
     this.renderer = options.renderer
+    this.store = options.store
     this.permissionPolicy = options.permissionPolicy ?? "approve-all"
     this.questionPolicy = options.questionPolicy ?? "first-option"
     this.onInteractivePermission = options.onInteractivePermission
     this.onInteractiveQuestion = options.onInteractiveQuestion
   }
 
+  private lastModelKey = ""
+
   async onAssistantMessage(sessionID: string, message: Message, parts: Part[]): Promise<void> {
     if (message.role !== "assistant") return
+    const msg = message as Record<string, unknown>
+
+    const modelID = msg.modelID as string | undefined
+    const providerID = msg.providerID as string | undefined
+    if (modelID && providerID) {
+      const key = `${providerID}/${modelID}`
+      if (key !== this.lastModelKey) {
+        const changed = this.lastModelKey !== "" && this.lastModelKey !== key
+        this.renderer.modelInfo(sessionID, providerID, modelID, changed)
+        this.lastModelKey = key
+      }
+    }
+
     for (const part of parts) {
       const record = part as Record<string, unknown>
       switch (part.type) {
@@ -65,8 +84,12 @@ export class DebugAdapter implements ChannelAdapter {
         case "tool": {
           const name = typeof record.tool === "string" ? record.tool : "unknown"
           const state = record.state as Record<string, unknown> | undefined
-          const status = state?.type as string ?? "pending"
-          this.renderer.tool(sessionID, name, status)
+          const status = state?.status as string ?? state?.type as string ?? "pending"
+          if (name === "task") {
+            this.renderSubtaskTool(sessionID, state)
+          } else {
+            this.renderer.tool(sessionID, name, status)
+          }
           break
         }
         case "reasoning": {
@@ -81,11 +104,46 @@ export class DebugAdapter implements ChannelAdapter {
           this.renderer.file(sessionID, mime, filename, url)
           break
         }
+        case "subtask": {
+          const agent = typeof record.agent === "string" ? record.agent : "unknown"
+          const description = typeof record.description === "string" ? record.description : ""
+          const model = record.model as { providerID?: string; modelID?: string } | undefined
+          this.renderer.subtask(sessionID, agent, description, model)
+          break
+        }
+        case "step-finish": {
+          const cost = typeof record.cost === "number" ? record.cost : 0
+          const tokens = record.tokens as { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } } | undefined
+          if (cost > 0 || tokens) {
+            this.renderer.stepCost(sessionID, cost, tokens)
+          }
+          break
+        }
       }
     }
   }
 
-  async onAssistantMessageComplete(sessionID: string, _message: Message, _parts: Part[]): Promise<void> {
+  private renderSubtaskTool(sessionID: string, state: Record<string, unknown> | undefined): void {
+    if (!state) return
+    const status = state.status as string ?? "pending"
+    const input = state.input as Record<string, unknown> | undefined
+    const agentType = (input?.subagent_type ?? input?.category ?? "unknown") as string
+    const description = (input?.description ?? input?.prompt ?? "") as string
+    const time = state.time as { start?: number; end?: number } | undefined
+
+    if (status === "completed" && time?.start && time?.end) {
+      const elapsed = ((time.end - time.start) / 1000).toFixed(1)
+      this.renderer.subtaskComplete(sessionID, agentType, description, `${elapsed}s`)
+    } else {
+      this.renderer.subtaskRunning(sessionID, agentType, description, status)
+    }
+  }
+
+  async onAssistantMessageComplete(sessionID: string, message: Message, parts: Part[]): Promise<void> {
+    const msg = message as Record<string, unknown>
+    const cost = typeof msg.cost === "number" ? msg.cost : 0
+    const tokens = msg.tokens as { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } } | undefined
+    this.renderer.messageCost(sessionID, cost, tokens)
     this.renderer.complete(sessionID)
   }
 
@@ -130,6 +188,11 @@ export class DebugAdapter implements ChannelAdapter {
 
   onSessionStatus(sessionID: string, status: DerivedSessionStatus): void {
     if (status === "idle") {
+      if (this.store) {
+        const cost = this.store.sessionCost(sessionID)
+        const tokens = this.store.sessionTokens(sessionID)
+        this.renderer.sessionSummary(sessionID, cost, tokens)
+      }
       this.renderer.idle(sessionID)
     } else {
       this.renderer.status(sessionID, status)

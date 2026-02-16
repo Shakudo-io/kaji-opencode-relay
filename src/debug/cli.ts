@@ -136,11 +136,13 @@ function createInteractiveQuestionHandler(
 export async function run(argv: string[] = process.argv.slice(2)): Promise<void> {
   const args = parseArgs(argv)
   const renderer = new ConsoleRenderer({ json: args.json, verbose: args.verbose })
-
   const readLine = args.interactive ? createStdinPromptReader() : undefined
+  const client = new HeadlessClient({ url: args.url, directory: args.directory })
+  const store = new SyncStore()
 
   const adapter = new DebugAdapter({
     renderer,
+    store,
     permissionPolicy: args.interactive ? "interactive" : "approve-all",
     questionPolicy: args.interactive ? "interactive" : "first-option",
     onInteractivePermission: readLine
@@ -150,9 +152,6 @@ export async function run(argv: string[] = process.argv.slice(2)): Promise<void>
       ? createInteractiveQuestionHandler(readLine, renderer, 60_000)
       : undefined,
   })
-
-  const client = new HeadlessClient({ url: args.url, directory: args.directory })
-  const store = new SyncStore()
   const router = new HeadlessRouter({
     client,
     store,
