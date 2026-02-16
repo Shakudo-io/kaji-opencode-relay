@@ -70,6 +70,14 @@ export class DebugAdapter implements ChannelAdapter {
       }
     }
 
+    const error = msg.error as Record<string, unknown> | undefined
+    if (error) {
+      const name = error.name as string ?? "Error"
+      const data = error.data as Record<string, unknown> | undefined
+      const errorMsg = data?.message as string ?? JSON.stringify(error)
+      this.renderer.error(sessionID, `${name}: ${errorMsg}`)
+    }
+
     for (const part of parts) {
       const record = part as Record<string, unknown>
       switch (part.type) {
