@@ -1,0 +1,34 @@
+{
+  "name": "opencode-headless",
+  "version": "0.1.0",
+  "description": "Headless core for OpenCode adapters",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./types": "./dist/types.js",
+    "./adapter": "./dist/adapter.js",
+    "./store": "./dist/store.js",
+    "./schemas": "./dist/schemas.js"
+  },
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --outdir dist --format esm --target node",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "@opencode-ai/sdk": "^1.2.5"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.4.5"
+  }
+}
