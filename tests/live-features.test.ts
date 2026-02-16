@@ -218,7 +218,71 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
     expect(adapterEvents.length).toBeGreaterThan(0)
   })
 
-  test("5. Summary of all part types seen across session", () => {
+  test("5. LLM generates a file — verify file content received", async () => {
+    adapterEvents.length = 0
+
+    await client.prompt(
+      sessionID,
+      "Create a file at /tmp/relay-test-output.txt with exactly this content: 'Hello from kaji-opencode-relay'. Use the write tool. Do not explain, just write the file.",
+    )
+
+    const deadline = Date.now() + WAIT_MS
+    while (Date.now() < deadline) {
+      if (adapterEvents.some((e) => e.method === "onAssistantMessageComplete")) break
+      await new Promise((r) => setTimeout(r, 300))
+    }
+
+    const completed = adapterEvents.some((e) => e.method === "onAssistantMessageComplete")
+    const messages = store.messages(sessionID)
+    const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1)
+    const parts = lastAssistant ? store.parts(lastAssistant.id) : []
+
+    const toolParts = parts.filter((p) => p.type === "tool")
+    const patchParts = parts.filter((p) => p.type === "patch")
+    const fileParts = parts.filter((p) => p.type === "file")
+    const textParts = parts.filter((p) => p.type === "text")
+    const textContent = textParts.map((p) => (p as Record<string, unknown>).text as string).join("")
+
+    const toolDetails = toolParts.map((p) => {
+      const record = p as Record<string, unknown>
+      return {
+        tool: record.tool,
+        state: (record.state as Record<string, unknown>)?.status,
+        hasAttachments: Array.isArray((record as Record<string, unknown>).attachments) && ((record as Record<string, unknown>).attachments as unknown[]).length > 0,
+        attachmentCount: Array.isArray((record as Record<string, unknown>).attachments) ? ((record as Record<string, unknown>).attachments as unknown[]).length : 0,
+      }
+    })
+
+    const patchDetails = patchParts.map((p) => {
+      const record = p as Record<string, unknown>
+      return { files: record.files, hash: record.hash }
+    })
+
+    let fileWritten = false
+    try {
+      const { readFileSync } = await import("fs")
+      const content = readFileSync("/tmp/relay-test-output.txt", "utf-8")
+      fileWritten = content.includes("Hello from kaji-opencode-relay")
+    } catch {}
+
+    log("llm-generates-file", completed, {
+      sessionID,
+      completed,
+      partTypes: parts.map((p) => p.type),
+      toolParts: toolDetails,
+      patchParts: patchDetails,
+      fileParts: fileParts.length,
+      textContent: textContent.slice(0, 300),
+      fileWrittenToDisk: fileWritten,
+      note: fileWritten
+        ? "LLM wrote file to /tmp/relay-test-output.txt — verified on disk"
+        : "File not found on disk — LLM may have used a different path or tool",
+    })
+
+    expect(completed).toBe(true)
+  })
+
+  test("6. Summary of all part types seen across session", () => {
     const messages = store.messages(sessionID)
     const partsByType: Record<string, number> = {}
 

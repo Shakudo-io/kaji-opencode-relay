@@ -179,11 +179,11 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     }
   }
 
-  async createSession(options?: Record<string, unknown>): Promise<Session> {
+  async createSession(options?: Record<string, unknown>) {
     return this.sdk.session.create(options)
   }
 
-  async prompt(sessionID: string, text: string, options?: SessionPromptOptions): Promise<unknown> {
+  async prompt(sessionID: string, text: string, options?: SessionPromptOptions) {
     return this.sdk.session.prompt({
       sessionID,
       parts: [{ id: `part_${Date.now()}`, type: "text" as const, text }],
@@ -196,7 +196,7 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     text: string,
     files: Array<{ type: "file"; mime: string; filename?: string; url: string }>,
     options?: SessionPromptOptions,
-  ): Promise<unknown> {
+  ) {
     const textPart = { id: `part_${Date.now()}`, type: "text" as const, text }
     const fileParts = files.map((f, i) => ({ id: `part_${Date.now()}_f${i}`, ...f }))
     return this.sdk.session.prompt({
@@ -206,35 +206,35 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     })
   }
 
-  async abort(sessionID: string): Promise<Session> {
+  async abort(sessionID: string) {
     return this.sdk.session.abort({ sessionID })
   }
 
-  async fork(sessionID: string): Promise<Session> {
+  async fork(sessionID: string) {
     return this.sdk.session.fork({ sessionID })
   }
 
-  async summarize(sessionID: string, model: string): Promise<Session> {
-    return this.sdk.session.summarize({ sessionID, model })
+  async summarize(sessionID: string, providerID: string, modelID: string) {
+    return this.sdk.session.summarize({ sessionID, providerID, modelID })
   }
 
-  async revert(sessionID: string, messageID: string): Promise<Session> {
+  async revert(sessionID: string, messageID: string) {
     return this.sdk.session.revert({ sessionID, messageID })
   }
 
-  async unrevert(sessionID: string): Promise<Session> {
+  async unrevert(sessionID: string) {
     return this.sdk.session.unrevert({ sessionID })
   }
 
-  async share(sessionID: string): Promise<Session> {
+  async share(sessionID: string) {
     return this.sdk.session.share({ sessionID })
   }
 
-  async unshare(sessionID: string): Promise<Session> {
+  async unshare(sessionID: string) {
     return this.sdk.session.unshare({ sessionID })
   }
 
-  async deleteSession(sessionID: string): Promise<Session> {
+  async deleteSession(sessionID: string) {
     return this.sdk.session.delete({ sessionID })
   }
 
@@ -246,15 +246,15 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     return this.sdk.session.command({ sessionID, command, ...(options ?? {}) })
   }
 
-  async replyPermission(requestID: string, reply: PermissionReply): Promise<PermissionRequest> {
+  async replyPermission(requestID: string, reply: PermissionReply) {
     return this.sdk.permission.reply({ requestID, reply: reply.reply, message: reply.message })
   }
 
-  async replyQuestion(requestID: string, answers: string[][]): Promise<QuestionRequest> {
+  async replyQuestion(requestID: string, answers: string[][]) {
     return this.sdk.question.reply({ requestID, answers })
   }
 
-  async rejectQuestion(requestID: string): Promise<QuestionRequest> {
+  async rejectQuestion(requestID: string) {
     return this.sdk.question.reject({ requestID })
   }
 

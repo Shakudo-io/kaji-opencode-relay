@@ -22,9 +22,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting",
+    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "prepublishOnly": "bun run build"
   },
   "peerDependencies": {
     "@opencode-ai/sdk": "^1.2.5"

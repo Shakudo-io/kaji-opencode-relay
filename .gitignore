@@ -3,3 +3,5 @@ dist/
 .DS_Store
 *.log
 coverage/
+tests/*.d.ts
+tests/*.d.ts.map

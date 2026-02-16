@@ -1,0 +1,8 @@
+src/
+tests/
+specs/
+bin/
+.git/
+*.test.ts
+tsconfig.json
+bun.lock

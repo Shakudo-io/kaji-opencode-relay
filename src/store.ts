@@ -433,7 +433,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       case "lsp.updated": {
         if (!this.sdk) break
         void (async () => {
-          const response = await this.sdk.lsp.status()
+          const response = await this.sdk!.lsp.status()
           this.state.lsp = response.data ?? []
         })().catch((error: unknown) => {
           const normalized = error instanceof Error ? error : new Error(String(error))
