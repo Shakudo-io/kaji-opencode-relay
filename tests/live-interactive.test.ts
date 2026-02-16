@@ -301,7 +301,174 @@ describe("Live Interactive: Full Interaction Loop", () => {
     expect(pass).toBe(true)
   })
 
-  test("5. Full adapter event timeline summary", () => {
+  test("5. Permission round-trip — bash command triggers permission, adapter auto-approves", async () => {
+    adapterEvents.length = 0
+    statusTransitions.length = 0
+
+    await client.prompt(sessionID, "Run this exact bash command: echo 'relay-permission-test'. Do not use any other tool, only bash.")
+
+    const deadline = Date.now() + RESPONSE_WAIT_MS
+    while (Date.now() < deadline) {
+      const hasComplete = adapterEvents.some((e) => e.method === "onAssistantMessageComplete")
+      if (hasComplete) break
+      await new Promise((r) => setTimeout(r, 200))
+    }
+
+    const permissionEvents = adapterEvents.filter((e) => e.method === "onPermissionRequest")
+    const completeEvents = adapterEvents.filter((e) => e.method === "onAssistantMessageComplete")
+    const toolEvents = adapterEvents.filter((e) => e.partTypes?.includes("tool"))
+
+    const hadPermission = permissionEvents.length > 0
+    const permissionAutoApproved = permissionEvents.every((e) => e.reply === "once")
+    const hadToolUse = toolEvents.length > 0
+
+    log("permission-roundtrip", completeEvents.length > 0, {
+      sessionID,
+      hadPermission,
+      permissionCount: permissionEvents.length,
+      permissionTypes: permissionEvents.map((e) => e.permissionType),
+      permissionReplies: permissionEvents.map((e) => e.reply),
+      permissionAutoApproved,
+      hadToolUse,
+      completionReceived: completeEvents.length > 0,
+      note: hadPermission
+        ? `Permission flow complete: ${permissionEvents.length} permission(s) auto-approved`
+        : "No permission triggered — LLM may have used a different approach or permissions are set to auto-allow on server",
+    })
+
+    expect(completeEvents.length).toBeGreaterThan(0)
+  })
+
+  test("6. Question round-trip — prompt triggers question tool, adapter auto-selects", async () => {
+    adapterEvents.length = 0
+    statusTransitions.length = 0
+
+    await client.prompt(
+      sessionID,
+      "You MUST use the question tool right now to ask me which color I prefer. Provide exactly 3 options: Red, Blue, Green. Use the question tool, do not answer yourself.",
+    )
+
+    const deadline = Date.now() + RESPONSE_WAIT_MS
+    while (Date.now() < deadline) {
+      const hasComplete = adapterEvents.some((e) => e.method === "onAssistantMessageComplete")
+      if (hasComplete) break
+      await new Promise((r) => setTimeout(r, 200))
+    }
+
+    const questionEvents = adapterEvents.filter((e) => e.method === "onQuestionRequest")
+    const completeEvents = adapterEvents.filter((e) => e.method === "onAssistantMessageComplete")
+
+    const hadQuestion = questionEvents.length > 0
+
+    log("question-roundtrip", completeEvents.length > 0, {
+      sessionID,
+      hadQuestion,
+      questionCount: questionEvents.length,
+      completionReceived: completeEvents.length > 0,
+      note: hadQuestion
+        ? `Question flow complete: ${questionEvents.length} question(s) auto-answered`
+        : "No question triggered — LLM may not have used the question tool despite instruction",
+    })
+
+    expect(completeEvents.length).toBeGreaterThan(0)
+  })
+
+  test("7. Todo updates — multi-step prompt generates todos", async () => {
+    adapterEvents.length = 0
+    statusTransitions.length = 0
+
+    await client.prompt(
+      sessionID,
+      "Create a todo list with exactly 3 items using the todowrite tool: 1) Buy groceries 2) Clean house 3) Read a book. Use the todowrite tool.",
+    )
+
+    const deadline = Date.now() + RESPONSE_WAIT_MS
+    while (Date.now() < deadline) {
+      const hasComplete = adapterEvents.some((e) => e.method === "onAssistantMessageComplete")
+      if (hasComplete) break
+      await new Promise((r) => setTimeout(r, 200))
+    }
+
+    const todoEvents = adapterEvents.filter((e) => e.method === "onTodoUpdate")
+    const completeEvents = adapterEvents.filter((e) => e.method === "onAssistantMessageComplete")
+
+    const hadTodos = todoEvents.length > 0
+    const todosInStore = store.todos(sessionID)
+
+    log("todo-updates", completeEvents.length > 0, {
+      sessionID,
+      hadTodoEvents: hadTodos,
+      todoEventCount: todoEvents.length,
+      todoCounts: todoEvents.map((e) => e.todoCount),
+      todosInStoreNow: todosInStore.length,
+      completionReceived: completeEvents.length > 0,
+      note: hadTodos
+        ? `Todo flow complete: ${todoEvents.length} update(s), ${todosInStore.length} todos in store`
+        : "No todo updates — agent may not have todowrite tool or chose not to use it",
+    })
+
+    expect(completeEvents.length).toBeGreaterThan(0)
+  })
+
+  test("8. Abort mid-stream — cancel a running response", async () => {
+    adapterEvents.length = 0
+    statusTransitions.length = 0
+
+    await client.prompt(
+      sessionID,
+      "Write a very long, detailed essay about the history of computing from 1940 to 2025. Include every major invention, company, and person involved. Make it at least 5000 words.",
+    )
+
+    await new Promise((r) => setTimeout(r, 3000))
+
+    const wasWorking = statusTransitions.some((s) => s.status === "working")
+    const hadStreaming = adapterEvents.some((e) => e.method === "onAssistantMessage")
+
+    await client.abort(sessionID)
+
+    await new Promise((r) => setTimeout(r, 2000))
+
+    const finalStatus = store.session.status(sessionID)
+
+    log("abort-mid-stream", wasWorking, {
+      sessionID,
+      wasWorkingBeforeAbort: wasWorking,
+      hadStreamingBeforeAbort: hadStreaming,
+      streamingEventsBeforeAbort: adapterEvents.filter((e) => e.method === "onAssistantMessage").length,
+      statusAfterAbort: finalStatus,
+      statusSequence: statusTransitions.map((s) => s.status),
+      note: wasWorking
+        ? `Abort successful: was working, now ${finalStatus}`
+        : "Could not confirm working state before abort — LLM may have responded too quickly",
+    })
+
+    expect(wasWorking || hadStreaming).toBe(true)
+  })
+
+  test("9. Post-interaction state (final verification)", async () => {
+    const deadline = Date.now() + RESPONSE_WAIT_MS
+    while (Date.now() < deadline && store.session.status(sessionID) !== "idle") {
+      await new Promise((r) => setTimeout(r, 300))
+    }
+
+    const messages = store.messages(sessionID)
+    const status = store.session.status(sessionID)
+    const userMsgs = messages.filter((m) => m.role === "user")
+    const assistantMsgs = messages.filter((m) => m.role === "assistant")
+
+    log("final-state", true, {
+      sessionID,
+      status,
+      totalMessages: messages.length,
+      userMessages: userMsgs.length,
+      assistantMessages: assistantMsgs.length,
+      messagesSorted: messages.every((m, i) => i === 0 || m.id >= messages[i - 1]!.id),
+    })
+
+    expect(status).toBe("idle")
+  })
+
+  test("10. Full adapter event timeline summary", () => {
     const timeline = adapterEvents.map((e) => ({
       method: e.method,
       elapsed: e.ts - adapterEvents[0]!.ts,
