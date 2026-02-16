@@ -41,6 +41,9 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   ERROR: "red",
   TOAST: "cyan",
   PROMPT: "green",
+  THINKING: "dim",
+  FILE: "cyan",
+  MODEL: "blue",
 }
 
 export type RendererOptions = {
@@ -163,5 +166,27 @@ export class ConsoleRenderer {
 
   idle(sessionID: string): void {
     this.render("STATUS", `${sessionID} → idle — waiting for input`, { sessionID, status: "idle" })
+  }
+
+  thinking(sessionID: string, text: string): void {
+    const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text
+    this.render("THINKING", truncated, { sessionID, textLength: text.length })
+  }
+
+  file(sessionID: string, mime: string, filename: string | undefined, url: string): void {
+    const sizeBytes = url.indexOf(";base64,") !== -1
+      ? Math.floor(((url.length - url.indexOf(";base64,") - 8) * 3) / 4)
+      : 0
+    const sizeStr = sizeBytes > 1024 * 1024
+      ? `${(sizeBytes / 1024 / 1024).toFixed(1)}MB`
+      : sizeBytes > 1024
+        ? `${(sizeBytes / 1024).toFixed(1)}KB`
+        : `${sizeBytes}B`
+    const name = filename ?? "(unnamed)"
+    this.render("FILE", `${name} (${mime}, ${sizeStr})`, { sessionID, mime, filename, sizeBytes })
+  }
+
+  model(sessionID: string, provider: string, modelId: string): void {
+    this.render("MODEL", `${provider}/${modelId}`, { sessionID, provider, modelId })
   }
 }

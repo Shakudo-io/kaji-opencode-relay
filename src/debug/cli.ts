@@ -3,6 +3,7 @@ import { SyncStore } from "../store"
 import { HeadlessRouter } from "../router"
 import { DebugAdapter } from "./adapter"
 import { ConsoleRenderer } from "./renderer"
+import { createFilePartInput, type FilePartInput } from "../files"
 import type { PermissionReply, PermissionRequest, QuestionReply, QuestionRequest } from "../types"
 import { createInterface } from "readline"
 
@@ -205,12 +206,26 @@ async function startInputLoop(
 
   const reader = readLine ?? createStdinPromptReader()
   let currentSessionID = args.session
+  const pendingFiles: FilePartInput[] = []
 
   const promptLoop = async () => {
     while (true) {
-      const input = await reader("> ")
+      const input = await reader(pendingFiles.length > 0 ? `[${pendingFiles.length} file(s)] > ` : "> ")
       const text = input.trim()
       if (!text) continue
+
+      if (text.startsWith("/attach ")) {
+        const filePath = text.slice(8).trim()
+        try {
+          const filePart = await createFilePartInput(filePath)
+          pendingFiles.push(filePart)
+          renderer.render("ATTACH", `Queued: ${filePart.filename} (${filePart.mime})`)
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
+          renderer.render("ERROR", `Failed to attach file: ${err.message}`)
+        }
+        continue
+      }
 
       if (!currentSessionID) {
         const existingSessions = store.state.session
@@ -218,8 +233,9 @@ async function startInputLoop(
           currentSessionID = existingSessions[existingSessions.length - 1]!.id
         } else {
           try {
-            const session = await client.createSession()
-            currentSessionID = session.id
+            const raw = await client.createSession() as Record<string, unknown>
+            const session = (raw.data ?? raw) as Record<string, unknown>
+            currentSessionID = session.id as string
             renderer.session(currentSessionID, "auto-created")
           } catch (error) {
             const err = error instanceof Error ? error : new Error(String(error))
@@ -230,8 +246,15 @@ async function startInputLoop(
       }
 
       try {
-        await client.prompt(currentSessionID, text)
-        renderer.prompt(currentSessionID, text)
+        if (pendingFiles.length > 0) {
+          const files = [...pendingFiles]
+          pendingFiles.length = 0
+          await client.promptWithFiles(currentSessionID, text, files)
+          renderer.prompt(currentSessionID, `${text} [+${files.length} file(s)]`)
+        } else {
+          await client.prompt(currentSessionID, text)
+          renderer.prompt(currentSessionID, text)
+        }
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
         renderer.render("ERROR", `Prompt failed: ${err.message}`)

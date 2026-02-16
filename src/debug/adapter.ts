@@ -52,14 +52,33 @@ export class DebugAdapter implements ChannelAdapter {
   async onAssistantMessage(sessionID: string, message: Message, parts: Part[]): Promise<void> {
     if (message.role !== "assistant") return
     for (const part of parts) {
-      if (part.type === "text" && typeof (part as Record<string, unknown>).content === "string") {
-        this.renderer.assistantText(sessionID, (part as Record<string, unknown>).content as string)
-      } else if (part.type === "tool") {
-        const tool = part as Record<string, unknown>
-        const name = (typeof tool.tool === "string" ? tool.tool : "unknown")
-        const state = tool.state as Record<string, unknown> | undefined
-        const status = state?.type as string ?? "pending"
-        this.renderer.tool(sessionID, name, status)
+      const record = part as Record<string, unknown>
+      switch (part.type) {
+        case "text": {
+          if (typeof record.content === "string") {
+            this.renderer.assistantText(sessionID, record.content as string)
+          }
+          break
+        }
+        case "tool": {
+          const name = typeof record.tool === "string" ? record.tool : "unknown"
+          const state = record.state as Record<string, unknown> | undefined
+          const status = state?.type as string ?? "pending"
+          this.renderer.tool(sessionID, name, status)
+          break
+        }
+        case "reasoning": {
+          const text = typeof record.text === "string" ? record.text : ""
+          this.renderer.thinking(sessionID, text)
+          break
+        }
+        case "file": {
+          const mime = typeof record.mime === "string" ? record.mime : "unknown"
+          const filename = typeof record.filename === "string" ? record.filename : undefined
+          const url = typeof record.url === "string" ? record.url : ""
+          this.renderer.file(sessionID, mime, filename, url)
+          break
+        }
       }
     }
   }

@@ -26,6 +26,7 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Q: Should the debug CLI allow sending prompts? → A: Yes — observer + prompt input + session create. Fully self-contained test harness.
 - Q: How should `--verbose` and `--json` interact? → A: Combined. In JSON mode, `--verbose` adds a `rawEvent` field to each JSON line. In text mode, it prints the raw SSE event below the formatted line.
 - Q: What happens when the server disconnects? → A: Print `[DISCONNECTED]` / `[RECONNECTING]` / `[RECONNECTED]` status lines. Rely on HeadlessClient's built-in auto-reconnection.
+- Q: Show reasoning/thinking parts by default? → A: Yes, always show `[THINKING]` parts. This is a debug tool.
 
 ---
 
@@ -41,6 +42,9 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - The debug adapter connects, bootstraps, and prints connection status
 - When a session is created, it prints session info (ID, project, directory)
 - When an assistant message streams, it prints text deltas in real-time
+- When reasoning/thinking parts arrive, it prints them with a `[THINKING]` tag
+- When file parts arrive (images, documents), it prints filename, mime type, and size
+- When model override is used, it shows which model is responding
 - When a permission request arrives, it auto-approves (configurable: auto-approve, auto-reject, prompt stdin)
 - When a question arrives, it auto-selects the first option (configurable)
 - When todos update, it prints the todo list
@@ -59,6 +63,18 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - If `--session <id>` is specified, prompts go to that session
 - If multiple sessions exist and none is specified, prompts go to the most recently active session
 - Stdin prompt input coexists with event output (input prompt line, output events above)
+
+### US5: Attach files from the CLI [P1]
+**As a** developer testing file attachment flows  
+**I want to** attach files to prompts from the debug CLI  
+**So that** I can test the full bidirectional file flow
+
+**Acceptance Scenarios:**
+- Typing `/attach <filepath>` adds a file to the next prompt
+- Image files (png, jpg, gif, webp) are sent as `FilePartInput` with base64 data URI
+- Non-image files (txt, md, json, etc.) are sent as `FilePartInput` with base64 data URI
+- When the LLM responds with `FilePart` attachments, they are rendered with `[FILE]` tag showing filename, mime, and size
+- The `--json` mode includes the full file data URI in the JSON output
 
 ### US2: Use as a template for new adapters [P1]
 **As a** developer building a new channel adapter  
@@ -105,6 +121,9 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Message streaming shows text accumulating (overwrite current line, or append)
 - Tool execution shows tool name, status, and timing
 - Diff display shows unified diff format for edit permissions
+- Reasoning/thinking parts rendered with `[THINKING]` tag — shows thinking text content
+- File parts rendered with `[FILE]` tag — shows filename, mime type, and data size (not the full base64)
+- Model info shown when available (provider/model in response metadata)
 
 ### FR3: Auto-Response Policies
 - Configurable via constructor options:
@@ -130,12 +149,15 @@ This adapter renders to **stdout** with structured, human-readable output — no
 - Debug adapter implementing full `ChannelAdapter` interface
 - CLI entry point with flag parsing
 - Console output formatting
+- Rendering all part types: text, tool, reasoning/thinking, file
+- File attachment from CLI via `/attach <filepath>` command
 - Auto-response policies for permissions/questions
 - Interactive stdin mode
 - NDJSON output mode
 - Stdin prompt input (send user messages to OpenCode)
 - Auto-create session when none exists
 - Connection lifecycle display (disconnect/reconnect status)
+- Model override display
 
 ### Out of Scope
 - Persistence of any kind

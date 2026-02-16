@@ -42,6 +42,7 @@ kaji-opencode-relay/
 ├── src/
 │   ├── index.ts              # Main entry: HeadlessClient + re-exports
 │   ├── client.ts             # HeadlessClient - wraps SDK, manages SSE lifecycle
+│   ├── files.ts              # File attachment utilities: createFilePartInput, createFilePartInputFromBuffer
 │   ├── store.ts              # SyncStore - event→state mapping (ported from sync.tsx)
 │   ├── router.ts             # HeadlessRouter - dispatches events to adapters
 │   ├── adapter.ts            # ChannelAdapter interface + AdapterCapabilities

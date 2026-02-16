@@ -1,10 +1,12 @@
 export { Binary } from "./binary"
 export { TypedEmitter } from "./events"
 export { HeadlessClient } from "./client"
-export type { HeadlessClientConfig, HeadlessEventSource } from "./client"
+export type { HeadlessClientConfig, HeadlessEventSource, ModelOverride, SessionPromptOptions } from "./client"
 export type { ChannelAdapter } from "./adapter"
 export { SyncStore } from "./store"
 export { HeadlessRouter, type HeadlessRouterConfig } from "./router"
+export { createFilePartInput, createFilePartInputFromBuffer, detectMimeType, filePartDataSize } from "./files"
+export type { FilePartInput, CreateFilePartOptions } from "./files"
 export * from "./schemas"
 export * from "./types"
 

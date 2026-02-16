@@ -215,7 +215,45 @@
 
 ---
 
-## Phase 8: Main Entry Point & Packaging [US1-US5]
+## Phase 7b: File Attachments & Model Override [US6, US7, FR6, FR7]
+
+- [ ] T031 [US6] Implement `createFilePartInput(filePath, options?)` utility
+  - Async: reads file from disk, detects mime type, base64-encodes, returns `FilePartInput`
+  - Configurable max file size (default 20MB), throws if exceeded
+  - File: `src/files.ts`
+
+- [ ] T032 [US6] Implement `createFilePartInputFromBuffer(buffer, filename, mime)` utility
+  - Sync: takes in-memory buffer, base64-encodes, returns `FilePartInput`
+  - File: `src/files.ts`
+
+- [ ] T033 [US6] Add `client.promptWithFiles(sessionID, text, files, options?)` method
+  - Sends text + FilePartInput[] as parts in a single prompt
+  - Merges text part and file parts into the parts array
+  - File: `src/client.ts`
+
+- [ ] T034 [FR7] Fix `SessionPromptOptions.model` type
+  - Change from `model?: string` to `model?: { providerID: string; modelID: string }`
+  - Ensure `client.prompt()` and `client.promptWithFiles()` pass model through correctly to SDK
+  - File: `src/client.ts`
+
+- [ ] T035 [US6] Write tests for file utilities
+  - Test `createFilePartInput` with image and text files
+  - Test size limit enforcement
+  - Test `createFilePartInputFromBuffer` with in-memory data
+  - Test mime type detection
+  - File: `tests/files.test.ts`
+
+- [ ] T036 [US6, US7] Write live tests for file and reasoning flows
+  - Test: send image to LLM, verify it acknowledges the image content
+  - Test: send text file to LLM, verify it reads the content
+  - Test: verify reasoning parts appear in store for thinking-capable models
+  - Test: send prompt with model override, verify response uses specified model
+  - Test: verify FilePart objects from tool results appear in store.parts()
+  - File: `tests/live-files.test.ts`
+
+---
+
+## Phase 8: Main Entry Point & Packaging [US1-US7]
 
 - [ ] T027 [US1] Wire up `index.ts` — main entry point
   - Export `HeadlessClient`, `SyncStore`, `HeadlessRouter`
@@ -261,7 +299,8 @@
 | 5. Operations | T019-T020 | Parallel | T008 |
 | 6. Adapter/Schemas | T021-T023 | All parallel | Phase 1 |
 | 7. Router | T024-T026 | Sequential | T011, T021, T008 |
+| 7b. Files/Model | T031-T036 | T031-T034 parallel, T035-T036 after | T008, T019 |
 | 8. Entry + Build | T027-T029 | Sequential | All above |
 | 9. Integration | T030 | — | All above |
 
-**Total: 30 tasks**
+**Total: 36 tasks**

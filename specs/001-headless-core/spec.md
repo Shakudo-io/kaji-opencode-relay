@@ -22,6 +22,8 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 - Q: What should HeadlessClient do when bootstrap fails? → A: Emit error event + allow manual retry. Client stays alive, exposes `bootstrap()` for retry. Adapter decides recovery strategy.
 - Q: Should the package include structured logging? → A: Yes, pluggable logger interface. Accept optional `{ debug, info, warn, error }` in config. Default: no-op.
 - Q: What happens when an adapter throws during permission/question handling? → A: Auto-reject the permission + log error. Prevents blocking OpenCode session.
+- Q: File size limit for attachments? → A: Configurable, default 20MB. Adapters can override for channel-specific limits.
+- Q: Sync or async file read? → A: Async. `createFilePartInput()` returns `Promise<FilePartInput>`.
 
 ---
 
@@ -66,6 +68,8 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 **Acceptance Scenarios:**
 - `createSession()` creates a new session and returns the session object
 - `prompt(sessionID, text, options?)` sends a user message with optional model/agent override
+- `promptWithFiles(sessionID, text, files: FilePartInput[], options?)` sends a prompt with file attachments (images, PDFs, text files) as base64 data URIs
+- Model override uses the SDK's `{ providerID, modelID }` shape, not a string
 - `abort(sessionID)` cancels the current operation
 - `fork(sessionID)` creates a forked copy
 - `summarize(sessionID, model)` triggers session compaction
@@ -101,6 +105,30 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
   { streaming, richFormatting, interactiveButtons, fileUpload, diffViewer }
   ```
 - The package exports a `HeadlessRouter` class that connects a `HeadlessClient` + `SyncStore` to one or more `ChannelAdapter` instances, dispatching events to the right adapter
+
+### US6: File Attachments [P1]
+**As a** channel adapter developer  
+**I want to** send and receive file attachments through the relay  
+**So that** users can share images, documents, and code files with the LLM
+
+**Acceptance Scenarios:**
+- `promptWithFiles(sessionID, text, files)` sends files as `FilePartInput` objects with base64 data URIs
+- Files of type image (png, jpg, gif, webp, svg), PDF, and text (txt, md, json, ts, py, etc.) are supported
+- The store correctly receives `FilePart` objects from assistant responses (tool results with attachments)
+- `onAssistantMessage` delivers `FilePart` objects to adapters with mime type, filename, and data URI
+- Adapters can distinguish file parts from text/tool/reasoning parts via `part.type === "file"`
+- A utility function `createFilePartInput(filePath)` reads a local file and returns a `FilePartInput` with data URI
+
+### US7: Reasoning/Thinking Parts [P1]
+**As a** channel adapter developer  
+**I want to** receive reasoning/thinking content from models that support it  
+**So that** I can display the model's thought process to users
+
+**Acceptance Scenarios:**
+- `ReasoningPart` objects (type: `"reasoning"`, has `text` field) flow through the store via `message.part.updated` and `message.part.delta`
+- `onAssistantMessage` delivers reasoning parts alongside text and tool parts
+- Adapters can identify reasoning parts via `part.type === "reasoning"`
+- Reasoning content streams via `message.part.delta` on the `text` field (same as text parts)
 
 ### US5: Lifecycle Management [P2]
 **As a** channel adapter developer  
@@ -145,6 +173,19 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 - Support multiple adapters simultaneously (e.g., Mattermost + Slack)
 - If no adapter claims a session, events are logged but not lost (store still has them)
 
+### FR6: File Attachment Support
+- `client.promptWithFiles(sessionID, text, files, options?)` sends a prompt with `FilePartInput[]` in the parts array
+- Files are base64-encoded data URIs: `data:{mime};base64,{base64data}`
+- Export an async `createFilePartInput(filePath: string, options?)` utility that reads a file from disk and returns a `Promise<FilePartInput>` with correct mime type and data URI
+- Export `createFilePartInputFromBuffer(buffer: Buffer | Uint8Array, filename: string, mime: string)` for in-memory files (sync — buffer already in memory)
+- Configurable file size limit: default 20MB, throws if exceeded. Adapters can set via options.
+- The store handles `FilePart` objects from assistant responses through the generic `message.part.updated` handler (no special handling needed — already works)
+- Adapters receive `FilePart` in the parts array of `onAssistantMessage` with: `{ type: "file", mime, filename?, url }`
+
+### FR7: Model Override
+- `SessionPromptOptions.model` uses the SDK's typed shape: `{ providerID: string, modelID: string }` — not a plain string
+- `client.prompt()` and `client.promptWithFiles()` pass the model through to the SDK correctly
+
 ### FR4: Type Exports
 - Re-export all relevant types from `@opencode-ai/sdk/v2`: Session, Message, Part, PermissionRequest, QuestionRequest, Todo, Provider, Agent, Config, etc.
 - Export Zod schemas for adapter input/output validation
@@ -183,9 +224,13 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 - SDK client wrapper with connection management
 - Reactive state store (event→state mapping, change events)
 - Session operation methods
+- File attachment support (send and receive via data URIs)
+- Reasoning/thinking part passthrough
+- Model override with `{ providerID, modelID }` shape
 - Channel adapter TypeScript interface + Zod schemas
 - HeadlessRouter for adapter dispatch
 - Type re-exports from @opencode-ai/sdk/v2
+- Utility functions: `createFilePartInput()`, `createFilePartInputFromBuffer()`
 - Package setup (tsconfig, package.json, build)
 
 ### Out of Scope

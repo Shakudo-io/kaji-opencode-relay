@@ -96,6 +96,38 @@
 
 ---
 
+## Phase 5: Reasoning, File, and Model Rendering
+
+- [ ] T011 [US1] Add reasoning/thinking part rendering to DebugAdapter
+  - In `onAssistantMessage`: detect `part.type === "reasoning"`, render with `[THINKING]` tag
+  - Show thinking text content (may be long — truncate in text mode, full in JSON mode)
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+- [ ] T012 [US5] Add file part rendering to DebugAdapter
+  - In `onAssistantMessage`: detect `part.type === "file"`, render with `[FILE]` tag
+  - Show filename, mime type, data size (not full base64)
+  - File: `src/debug/adapter.ts`, `src/debug/renderer.ts`
+
+- [ ] T013 [US5] Implement `/attach <filepath>` CLI command
+  - Parse `/attach` prefix in stdin input loop
+  - Use `createFilePartInput()` to read file and create FilePartInput
+  - Queue file for next prompt — send with `client.promptWithFiles()`
+  - Support multiple `/attach` commands before sending prompt
+  - File: `src/debug/cli.ts`
+
+- [ ] T014 [US1] Add model info display
+  - Show model/provider info when available in response metadata
+  - File: `src/debug/renderer.ts`
+
+- [ ] T015 [US5, US7] Write live tests for reasoning, files, and model override
+  - Test: send image file via `/attach`, verify LLM acknowledges image
+  - Test: verify reasoning parts render with `[THINKING]` tag
+  - Test: verify file parts render with `[FILE]` tag
+  - Test: model override display
+  - File: `tests/debug-live-features.test.ts`
+
+---
+
 ## Task Summary
 
 | Phase | Tasks | Depends On |
@@ -104,5 +136,6 @@
 | 2. CLI | T003-T004, T010 | T001, T002 |
 | 3. Interactive | T005-T006 | T003, T010 |
 | 4. Testing | T007-T009 | T005, T006 |
+| 5. Reasoning/Files/Model | T011-T015 | T001, T003, 001-T031 (file utils) |
 
-**Total: 10 tasks**
+**Total: 15 tasks**

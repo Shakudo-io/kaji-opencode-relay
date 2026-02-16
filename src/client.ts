@@ -18,8 +18,13 @@ export type HeadlessEventSource = {
   on: (handler: (event: Event) => void) => () => void
 }
 
+export type ModelOverride = {
+  providerID: string
+  modelID: string
+}
+
 export type SessionPromptOptions = {
-  model?: string
+  model?: ModelOverride
   agent?: string
   [key: string]: unknown
 }
@@ -182,6 +187,21 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     return this.sdk.session.prompt({
       sessionID,
       parts: [{ id: `part_${Date.now()}`, type: "text" as const, text }],
+      ...(options ?? {}),
+    })
+  }
+
+  async promptWithFiles(
+    sessionID: string,
+    text: string,
+    files: Array<{ type: "file"; mime: string; filename?: string; url: string }>,
+    options?: SessionPromptOptions,
+  ): Promise<unknown> {
+    const textPart = { id: `part_${Date.now()}`, type: "text" as const, text }
+    const fileParts = files.map((f, i) => ({ id: `part_${Date.now()}_f${i}`, ...f }))
+    return this.sdk.session.prompt({
+      sessionID,
+      parts: [textPart, ...fileParts],
       ...(options ?? {}),
     })
   }
