@@ -1,6 +1,6 @@
 # Tasks: OpenCode Headless Core
 
-**Feature ID**: opencode-headless-001-headless-core  
+**Feature ID**: kaji-opencode-relay-001-headless-core  
 **Created**: 2026-02-16  
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)
 
@@ -8,7 +8,7 @@
 
 ## Phase 1: Project Setup
 
-- [ ] T001 [Setup] Initialize package: `package.json`, `tsconfig.json`, `.gitignore`, `LICENSE` in worktree `/root/gitrepos/opencode-headless-001-headless-core/`
+- [ ] T001 [Setup] Initialize package: `package.json`, `tsconfig.json`, `.gitignore`, `LICENSE` in worktree `/root/gitrepos/kaji-opencode-relay-001-headless-core/`
   - Bun project, ESM, strict TypeScript
   - Dependencies: `@opencode-ai/sdk` (peer), `zod`
   - Dev dependencies: `bun-types`, `typescript`

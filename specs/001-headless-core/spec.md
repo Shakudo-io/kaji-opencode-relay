@@ -1,6 +1,6 @@
 # Specification: OpenCode Headless Core
 
-**Feature ID**: opencode-headless-001-headless-core  
+**Feature ID**: kaji-opencode-relay-001-headless-core  
 **Status**: Draft  
 **Created**: 2026-02-16  
 **Priority**: P1 — Foundation for all channel adapters
@@ -9,7 +9,7 @@
 
 ## Overview
 
-Extract the non-rendering core of the OpenCode TUI into a standalone TypeScript package (`opencode-headless`) that any channel adapter can use to drive OpenCode sessions. The package consumes the OpenCode server's HTTP API and SSE event stream — exactly like the TUI does — but without any terminal, SolidJS, or rendering dependencies.
+Extract the non-rendering core of the OpenCode TUI into a standalone TypeScript package (`kaji-opencode-relay`) that any channel adapter can use to drive OpenCode sessions. The package consumes the OpenCode server's HTTP API and SSE event stream — exactly like the TUI does — but without any terminal, SolidJS, or rendering dependencies.
 
 This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, voice, and WhatsApp will be built on top of this package.
 
@@ -171,7 +171,7 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 
 ### NFR3: Developer Experience
 - Full TypeScript types with JSDoc documentation
-- Published as npm package: `opencode-headless`
+- Published as npm package: `kaji-opencode-relay`
 - Clear examples in README showing basic adapter creation
 - Exported types should be sufficient to build an adapter without reading source
 
@@ -230,7 +230,7 @@ This is the foundation layer. Adapters for Mattermost, Slack, Copilot, email, vo
 
 ## Success Criteria
 
-- A developer can `npm install opencode-headless`, connect to an OpenCode server, and subscribe to state changes in under 10 lines of code
+- A developer can `npm install kaji-opencode-relay`, connect to an OpenCode server, and subscribe to state changes in under 10 lines of code
 - The state store correctly handles all 18+ event types from the OpenCode server
 - A minimal adapter implementing the `ChannelAdapter` interface can send prompts and receive responses
 - The package has zero rendering/UI dependencies

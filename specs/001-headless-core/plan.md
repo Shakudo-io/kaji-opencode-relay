@@ -1,6 +1,6 @@
 # Implementation Plan: OpenCode Headless Core
 
-**Feature ID**: opencode-headless-001-headless-core  
+**Feature ID**: kaji-opencode-relay-001-headless-core  
 **Created**: 2026-02-16  
 **Spec**: [spec.md](./spec.md)
 
@@ -12,7 +12,7 @@
 - **TypeScript** with strict mode
 - **Bun** for development, build, and test
 - Compiled to ESM for distribution (compatible with Node.js 18+, Bun, Deno)
-- Published as `opencode-headless` on npm
+- Published as `kaji-opencode-relay` on npm
 
 ### Key Dependencies
 | Package | Purpose | Version |
@@ -38,7 +38,7 @@
 ### Module Structure
 
 ```
-opencode-headless/
+kaji-opencode-relay/
 ├── src/
 │   ├── index.ts              # Main entry: HeadlessClient + re-exports
 │   ├── client.ts             # HeadlessClient - wraps SDK, manages SSE lifecycle
@@ -189,11 +189,11 @@ This is a new package in a new repo, not a TUI. The Mattermost plugin constituti
 
 | Export | Contents |
 |--------|----------|
-| `opencode-headless` | `HeadlessClient`, `HeadlessRouter`, `SyncStore` + everything |
-| `opencode-headless/types` | All re-exported types from SDK |
-| `opencode-headless/adapter` | `ChannelAdapter` interface, `AdapterCapabilities` |
-| `opencode-headless/store` | `SyncStore` standalone (for advanced use) |
-| `opencode-headless/schemas` | Zod schemas for adapter I/O validation |
+| `kaji-opencode-relay` | `HeadlessClient`, `HeadlessRouter`, `SyncStore` + everything |
+| `kaji-opencode-relay/types` | All re-exported types from SDK |
+| `kaji-opencode-relay/adapter` | `ChannelAdapter` interface, `AdapterCapabilities` |
+| `kaji-opencode-relay/store` | `SyncStore` standalone (for advanced use) |
+| `kaji-opencode-relay/schemas` | Zod schemas for adapter I/O validation |
 
 ---
 

@@ -1,9 +1,9 @@
 # Tasks: Debug/Template Adapter
 
-**Feature ID**: opencode-headless-002-debug-adapter  
+**Feature ID**: kaji-opencode-relay-002-debug-adapter  
 **Created**: 2026-02-16  
 **Spec**: [spec.md](./spec.md) | **Plan**: [plan.md](./plan.md)  
-**Depends On**: opencode-headless-001-headless-core (must be implemented first)
+**Depends On**: kaji-opencode-relay-001-headless-core (must be implemented first)
 
 ---
 
@@ -79,7 +79,7 @@
 
 - [ ] T009 [Setup] Update package.json exports and README
   - Add `"./debug"` export
-  - Add `"bin"` entry for `opencode-headless-debug`
+  - Add `"bin"` entry for `kaji-opencode-relay-debug`
   - Update README with debug adapter usage section
   - File: `package.json`, `README.md`
 

@@ -1,6 +1,6 @@
 # Research: OpenCode Headless Core
 
-**Feature ID**: opencode-headless-001-headless-core  
+**Feature ID**: kaji-opencode-relay-001-headless-core  
 **Created**: 2026-02-16
 
 ---

@@ -1,7 +1,7 @@
 {
-  "name": "opencode-headless",
+  "name": "kaji-opencode-relay",
   "version": "0.1.0",
-  "description": "Headless core for OpenCode adapters",
+  "description": "Universal relay for OpenCode — route AI coding sessions to any channel",
   "license": "MIT",
   "type": "module",
   "exports": {

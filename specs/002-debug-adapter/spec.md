@@ -1,16 +1,16 @@
 # Specification: Debug/Template Adapter
 
-**Feature ID**: opencode-headless-002-debug-adapter  
+**Feature ID**: kaji-opencode-relay-002-debug-adapter  
 **Status**: Draft  
 **Created**: 2026-02-16  
 **Priority**: P1 — Validates headless core, serves as template for real adapters  
-**Depends On**: opencode-headless-001-headless-core
+**Depends On**: kaji-opencode-relay-001-headless-core
 
 ---
 
 ## Overview
 
-A debug/template adapter that implements the `ChannelAdapter` interface from `opencode-headless`. It logs all events to the console (or a configurable output), auto-responds to permissions and questions, and serves two purposes:
+A debug/template adapter that implements the `ChannelAdapter` interface from `kaji-opencode-relay`. It logs all events to the console (or a configurable output), auto-responds to permissions and questions, and serves two purposes:
 
 1. **Debug tool**: Developers building new adapters can run the debug adapter to see exactly what events flow through the system and in what order
 2. **Template**: Copy-paste starting point for building real adapters (Mattermost, Slack, Copilot, etc.)
@@ -29,12 +29,12 @@ This adapter renders to **stdout** with structured, human-readable output — no
 ## User Stories
 
 ### US1: Run a headless OpenCode session with console output [P1]
-**As a** developer evaluating opencode-headless  
+**As a** developer evaluating kaji-opencode-relay  
 **I want to** run a debug adapter that shows me everything happening in an OpenCode session  
 **So that** I understand the event flow before building a real adapter
 
 **Acceptance Scenarios:**
-- Given an OpenCode server URL, I can run `npx opencode-headless-debug --url http://localhost:4096`
+- Given an OpenCode server URL, I can run `npx kaji-opencode-relay-debug --url http://localhost:4096`
 - The debug adapter connects, bootstraps, and prints connection status
 - When a session is created, it prints session info (ID, project, directory)
 - When an assistant message streams, it prints text deltas in real-time
@@ -71,7 +71,7 @@ This adapter renders to **stdout** with structured, human-readable output — no
 ## Functional Requirements
 
 ### FR1: CLI Entry Point
-- Runnable as `npx opencode-headless-debug` or `bun run src/cli.ts`
+- Runnable as `npx kaji-opencode-relay-debug` or `bun run src/cli.ts`
 - Accept flags: `--url <server-url>`, `--directory <path>`, `--session <id>`, `--interactive`, `--verbose`, `--json`
 - `--session <id>` filters to a specific session (default: claim all sessions, show all events)
 - `--json` mode outputs NDJSON (newline-delimited JSON) — one event per line — for pipe-ability

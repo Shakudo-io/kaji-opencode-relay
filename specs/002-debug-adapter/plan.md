@@ -1,6 +1,6 @@
 # Implementation Plan: Debug/Template Adapter
 
-**Feature ID**: opencode-headless-002-debug-adapter  
+**Feature ID**: kaji-opencode-relay-002-debug-adapter  
 **Created**: 2026-02-16  
 **Spec**: [spec.md](./spec.md)
 
@@ -8,7 +8,7 @@
 
 ## Technical Context
 
-- Lives in the **same repo** as opencode-headless (`opencode-headless/`)
+- Lives in the **same repo** as kaji-opencode-relay (`kaji-opencode-relay/`)
 - Located at `src/debug/` — shipped as part of the package
 - CLI entry point: `bin/debug.ts` (exported in package.json `"bin"`)
 - Depends on the headless core (same package, relative imports)
@@ -16,7 +16,7 @@
 ### Module Structure
 
 ```
-opencode-headless/
+kaji-opencode-relay/
 ├── src/
 │   ├── ...                    # (Phase 0 headless core)
 │   └── debug/
