@@ -439,4 +439,37 @@ describe("Live Integration: Relay → OpenCode Server", () => {
 
     expect(client.isConnected).toBe(true)
   })
+
+  test("13. MCP servers listed with status", () => {
+    const mcp = store.mcpStatus
+    const mcpEntries = Object.entries(mcp)
+    const servers = mcpEntries.map(([name, status]) => {
+      const s = status as Record<string, unknown>
+      return { name, status: s.status as string, error: s.error as string | undefined }
+    })
+
+    const connected = servers.filter((s) => s.status === "connected")
+    const failed = servers.filter((s) => s.status === "failed")
+    const disabled = servers.filter((s) => s.status === "disabled")
+    const other = servers.filter((s) => !["connected", "failed", "disabled"].includes(s.status))
+
+    const resources = store.mcpResources
+    const resourceEntries = Object.entries(resources)
+
+    log("mcp-servers", servers.length > 0, {
+      totalServers: servers.length,
+      connected: connected.length,
+      failed: failed.length,
+      disabled: disabled.length,
+      other: other.length,
+      servers: servers.map((s) => ({ name: s.name, status: s.status, ...(s.error ? { error: s.error } : {}) })),
+      totalResources: resourceEntries.length,
+      sampleResources: resourceEntries.slice(0, 5).map(([_key, r]) => {
+        const res = r as Record<string, unknown>
+        return { name: res.name, client: res.client, uri: res.uri }
+      }),
+    })
+
+    expect(servers.length).toBeGreaterThan(0)
+  })
 })

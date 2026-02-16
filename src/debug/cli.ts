@@ -177,6 +177,14 @@ export async function run(argv: string[] = process.argv.slice(2)): Promise<void>
   const sessions = store.state.session.length
   renderer.bootstrap(providers, agents, sessions)
 
+  const mcpEntries = Object.entries(store.state.mcp)
+  if (mcpEntries.length > 0) {
+    renderer.mcpServers(mcpEntries.map(([name, status]) => {
+      const s = status as Record<string, unknown>
+      return { name, status: s.status as string, error: s.error as string | undefined }
+    }))
+  }
+
   if (args.session) {
     router.setSessionAdapter(args.session, "debug")
   }

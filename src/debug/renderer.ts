@@ -48,6 +48,7 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   COST: "green",
   STEP: "dim",
   SUBTASK: "magenta",
+  MCP: "cyan",
 }
 
 export type RendererOptions = {
@@ -116,6 +117,37 @@ export class ConsoleRenderer {
 
   bootstrap(providers: number, agents: number, sessions: number): void {
     this.render("BOOTSTRAP", `Loaded ${providers} providers, ${agents} agents, ${sessions} sessions`)
+  }
+
+  mcpServers(servers: Array<{ name: string; status: string; error?: string }>): void {
+    if (servers.length === 0) {
+      this.render("MCP", "No MCP servers configured")
+      return
+    }
+    const connected = servers.filter((s) => s.status === "connected")
+    const failed = servers.filter((s) => s.status === "failed")
+    const disabled = servers.filter((s) => s.status === "disabled")
+    const other = servers.filter((s) => !["connected", "failed", "disabled"].includes(s.status))
+
+    const summary = [`${servers.length} servers`]
+    if (connected.length > 0) summary.push(`${connected.length} connected`)
+    if (failed.length > 0) summary.push(`${failed.length} failed`)
+    if (disabled.length > 0) summary.push(`${disabled.length} disabled`)
+    if (other.length > 0) summary.push(`${other.length} other`)
+
+    this.render("MCP", summary.join(", "), {
+      total: servers.length,
+      connected: connected.length,
+      failed: failed.length,
+      disabled: disabled.length,
+      servers: servers.map((s) => ({ name: s.name, status: s.status, ...(s.error ? { error: s.error } : {}) })),
+    })
+
+    for (const server of servers) {
+      const icon = server.status === "connected" ? "✅" : server.status === "failed" ? "❌" : server.status === "disabled" ? "⏸️" : "⚠️"
+      const errorStr = server.error ? ` — ${server.error}` : ""
+      this.render("MCP", `  ${icon} ${server.name} (${server.status})${errorStr}`)
+    }
   }
 
   session(sessionID: string, info?: string): void {
