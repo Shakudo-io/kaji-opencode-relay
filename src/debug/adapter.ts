@@ -55,8 +55,10 @@ export class DebugAdapter implements ChannelAdapter {
       const record = part as Record<string, unknown>
       switch (part.type) {
         case "text": {
-          if (typeof record.content === "string") {
-            this.renderer.assistantText(sessionID, record.content as string)
+          const textValue = (typeof record.text === "string" ? record.text : undefined)
+            ?? (typeof record.content === "string" ? record.content : undefined)
+          if (textValue) {
+            this.renderer.assistantText(sessionID, textValue)
           }
           break
         }

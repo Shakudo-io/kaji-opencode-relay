@@ -67,7 +67,7 @@ describe("Live Interactive: Full Interaction Loop", () => {
     const origMessage = adapter.onAssistantMessage.bind(adapter)
     adapter.onAssistantMessage = async (sid, msg, parts) => {
       const textParts = parts.filter((p) => p.type === "text")
-      const totalText = textParts.reduce((acc, p) => acc + ((p as Record<string, unknown>).content as string ?? "").length, 0)
+      const totalText = textParts.reduce((acc, p) => acc + ((p as Record<string, unknown>).text as string ?? "").length, 0)
       adapterEvents.push({
         method: "onAssistantMessage",
         ts: Date.now(),
@@ -184,7 +184,7 @@ describe("Live Interactive: Full Interaction Loop", () => {
     const lastParts = lastAssistant ? store.parts(lastAssistant.id) : []
     const textContent = lastParts
       .filter((p) => p.type === "text")
-      .map((p) => (p as Record<string, unknown>).content as string)
+      .map((p) => (p as Record<string, unknown>).text as string)
       .join("")
 
     const pass = receivedStreaming && receivedCompletion
@@ -236,7 +236,7 @@ describe("Live Interactive: Full Interaction Loop", () => {
     const lastParts = lastAssistant ? store.parts(lastAssistant.id) : []
     const toolParts = lastParts.filter((p) => p.type === "tool")
     const textParts = lastParts.filter((p) => p.type === "text")
-    const textContent = textParts.map((p) => (p as Record<string, unknown>).content as string).join("")
+    const textContent = textParts.map((p) => (p as Record<string, unknown>).text as string).join("")
     const toolNames = toolParts.map((p) => (p as Record<string, unknown>).tool as string)
 
     const pass = completeEvents.length > 0

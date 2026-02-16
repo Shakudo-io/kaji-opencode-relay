@@ -105,7 +105,7 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
     const lastAssistant = messages.filter((m) => m.role === "assistant").at(-1)
     const parts = lastAssistant ? store.parts(lastAssistant.id) : []
     const textParts = parts.filter((p) => p.type === "text")
-    const textContent = textParts.map((p) => (p as Record<string, unknown>).content as string).join("")
+    const textContent = textParts.map((p) => (p as Record<string, unknown>).text as string).join("")
 
     log("send-image", completed, {
       sessionID,
@@ -143,7 +143,7 @@ describe("Live Features: Files, Reasoning, Model Override", () => {
     const parts = lastAssistant ? store.parts(lastAssistant.id) : []
     const textContent = parts
       .filter((p) => p.type === "text")
-      .map((p) => (p as Record<string, unknown>).content as string)
+      .map((p) => (p as Record<string, unknown>).text as string)
       .join("")
 
     log("send-text-file", completed, {
