@@ -65,3 +65,31 @@ export interface AdapterCapabilities {
   diffViewer: boolean
   codeBlocks: boolean
 }
+
+export type MessageOrigin = {
+  adapterId: string
+  channel: string
+  userId?: string
+  username?: string
+}
+
+export type FileAttachmentInfo = {
+  mime: string
+  filename: string
+  url: string
+  size?: number
+}
+
+export type ReactionInfo = {
+  emoji: string
+  userId: string
+  messageId?: string
+}
+
+export type SessionInfo = {
+  sessionId: string
+  shortId?: string
+  projectName?: string
+  directory?: string
+  title?: string
+}

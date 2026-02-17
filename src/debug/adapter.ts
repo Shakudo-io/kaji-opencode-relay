@@ -2,12 +2,16 @@ import type { ChannelAdapter } from "../adapter"
 import type {
   AdapterCapabilities,
   DerivedSessionStatus,
+  FileAttachmentInfo,
   Message,
+  MessageOrigin,
   Part,
   PermissionReply,
   PermissionRequest,
   QuestionReply,
   QuestionRequest,
+  ReactionInfo,
+  SessionInfo,
   Todo,
   ToastNotification,
 } from "../types"
@@ -224,5 +228,25 @@ export class DebugAdapter implements ChannelAdapter {
 
   onToast(notification: ToastNotification): void {
     this.renderer.toast(notification.variant, notification.message)
+  }
+
+  async onInboundMessage(sessionID: string, text: string, origin: MessageOrigin): Promise<void> {
+    this.renderer.inboundMessage(sessionID, text, origin)
+  }
+
+  async onFileAttachment(sessionID: string, file: FileAttachmentInfo): Promise<void> {
+    this.renderer.fileAttachment(sessionID, file)
+  }
+
+  async onReaction(sessionID: string, reaction: ReactionInfo): Promise<void> {
+    this.renderer.reaction(sessionID, reaction)
+  }
+
+  async onSessionCreated(sessionID: string, session: SessionInfo): Promise<void> {
+    this.renderer.sessionCreated(sessionID, session)
+  }
+
+  async onSessionDeleted(sessionID: string): Promise<void> {
+    this.renderer.sessionDeleted(sessionID)
   }
 }

@@ -3,7 +3,7 @@ import { HeadlessClient, type SdkClient } from "../src/client"
 import type { ChannelAdapter } from "../src/adapter"
 import { HeadlessRouter } from "../src/router"
 import { SyncStore } from "../src/store"
-import type { PermissionRequest, QuestionRequest } from "../src/types"
+import type { Message, PermissionRequest, QuestionRequest } from "../src/types"
 
 type PermissionReplyInput = { sessionID: string; requestID: string; reply: "once" | "always" | "reject"; message?: string }
 type QuestionReplyInput = { sessionID: string; requestID: string; answers: string[][] }
@@ -30,6 +30,43 @@ const makeQuestionRequest = (id: string): QuestionRequest => ({
     },
   ],
 })
+
+const makeUserMessage = (id: string, text: string): Message => ({
+  id,
+  sessionID: "session",
+  role: "user",
+  time: { created: Date.now() },
+  agent: "user",
+  model: { providerID: "provider", modelID: "model" },
+  summary: { title: text, body: text, diffs: [] },
+})
+
+const makeAdapter = (id: string, channel: string, onInboundMessage?: ChannelAdapter["onInboundMessage"]): ChannelAdapter => {
+  const adapter: ChannelAdapter = {
+    id,
+    channel,
+    capabilities: {
+      streaming: false,
+      richFormatting: false,
+      interactiveButtons: false,
+      fileUpload: false,
+      diffViewer: false,
+      codeBlocks: false,
+    },
+    onAssistantMessage: async () => undefined,
+    onAssistantMessageComplete: async () => undefined,
+    onPermissionRequest: async () => ({ reply: "once" }),
+    onQuestionRequest: async () => ({ rejected: true }),
+    onSessionStatus: () => undefined,
+    onTodoUpdate: () => undefined,
+    onSessionError: () => undefined,
+    onToast: () => undefined,
+  }
+  if (onInboundMessage) {
+    adapter.onInboundMessage = onInboundMessage
+  }
+  return adapter
+}
 
 const waitFor = async (condition: () => boolean, timeoutMs = 200): Promise<void> => {
   const start = Date.now()
@@ -77,6 +114,7 @@ describe("HeadlessRouter", () => {
       },
       session: {
         create: async () => ({ data: { id: "session" } }),
+        prompt: async () => ({ data: { id: "message" } }),
       },
     } as SdkClient
 
@@ -154,6 +192,99 @@ describe("HeadlessRouter", () => {
 
     await waitFor(() => questionRejects.length === 1)
     expect(questionRejects[0]?.requestID).toBe("question-1")
+
+    await router.shutdown()
+    await client.disconnect()
+  })
+
+  test("suppresses inbound echo for adapter-originated prompt", async () => {
+    const client = createClient()
+    await client.connect()
+    const store = new SyncStore()
+
+    const inboundEvents: Array<{ sessionID: string }> = []
+    const adapter = makeAdapter("adapter", "console", async (sessionID) => {
+      inboundEvents.push({ sessionID })
+    })
+
+    const router = new HeadlessRouter({ client, store, adapters: [adapter] })
+    await router.promptWithOrigin("session", "hello", "adapter")
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-1", "hello") } })
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(inboundEvents.length).toBe(0)
+
+    await router.shutdown()
+    await client.disconnect()
+  })
+
+  test("routes inbound message with external origin", async () => {
+    const client = createClient()
+    await client.connect()
+    const store = new SyncStore()
+
+    const inboundEvents: Array<{ sessionID: string; text: string; originId: string; originChannel: string }> = []
+    const originAdapter = makeAdapter("origin", "origin-channel")
+    const receiverAdapter = makeAdapter("receiver", "receiver-channel", async (sessionID, text, origin) => {
+      inboundEvents.push({ sessionID, text, originId: origin.adapterId, originChannel: origin.channel })
+    })
+
+    const router = new HeadlessRouter({ client, store, adapters: [originAdapter, receiverAdapter] })
+    router.setSessionAdapter("session", "receiver")
+
+    await router.promptWithOrigin("session", "hello", "origin")
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-2", "hello") } })
+
+    await waitFor(() => inboundEvents.length === 1)
+    expect(inboundEvents[0]).toEqual({ sessionID: "session", text: "hello", originId: "origin", originChannel: "origin-channel" })
+
+    await router.shutdown()
+    await client.disconnect()
+  })
+
+  test("uses tui origin when no prompt is queued", async () => {
+    const client = createClient()
+    await client.connect()
+    const store = new SyncStore()
+
+    const inboundEvents: Array<{ originId: string; originChannel: string }> = []
+    const adapter = makeAdapter("adapter", "console", async (_sessionID, _text, origin) => {
+      inboundEvents.push({ originId: origin.adapterId, originChannel: origin.channel })
+    })
+
+    const router = new HeadlessRouter({ client, store, adapters: [adapter] })
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-3", "from tui") } })
+
+    await waitFor(() => inboundEvents.length === 1)
+    expect(inboundEvents[0]).toEqual({ originId: "tui", originChannel: "terminal" })
+
+    await router.shutdown()
+    await client.disconnect()
+  })
+
+  test("tracks prompt origins in FIFO order", async () => {
+    const client = createClient()
+    await client.connect()
+    const store = new SyncStore()
+
+    const origins: string[] = []
+    const adapterA = makeAdapter("origin-a", "channel-a")
+    const adapterB = makeAdapter("origin-b", "channel-b")
+    const receiver = makeAdapter("receiver", "receiver-channel", async (_sessionID, _text, origin) => {
+      origins.push(origin.adapterId)
+    })
+
+    const router = new HeadlessRouter({ client, store, adapters: [adapterA, adapterB, receiver] })
+    router.setSessionAdapter("session", "receiver")
+
+    await router.promptWithOrigin("session", "first", "origin-a")
+    await router.promptWithOrigin("session", "second", "origin-b")
+
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-4", "first") } })
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-5", "second") } })
+
+    await waitFor(() => origins.length === 2)
+    expect(origins).toEqual(["origin-a", "origin-b"])
 
     await router.shutdown()
     await client.disconnect()
