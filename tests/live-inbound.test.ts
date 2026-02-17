@@ -224,4 +224,75 @@ describe("Live Inbound: Origin Tracking & Cross-Adapter Visibility", () => {
     expect(pass).toBe(true)
     await client.deleteSession(sessionID).catch(() => undefined)
   })
+
+  test("5. onFileAttachment renders correctly (synthetic)", async () => {
+    renderEvents.length = 0
+
+    const file = {
+      mime: "application/pdf",
+      filename: "quarterly-report.pdf",
+      url: "http://example.com/files/report.pdf",
+      size: 2_450_000,
+    }
+
+    await adapter.onFileAttachment!("ses_synthetic", file)
+
+    const fileEvent = renderEvents.find((e) => e.tag === "FILE" && e.message.includes("quarterly-report"))
+    const pass = !!fileEvent
+
+    narrate(
+      "onFileAttachment renders file metadata",
+      pass,
+      pass
+        ? `Debug adapter rendered: ${fileEvent!.message}`
+        : "No FILE render event found after calling onFileAttachment.",
+      { renderedMessage: fileEvent?.message, file }
+    )
+
+    expect(pass).toBe(true)
+  })
+
+  test("6. onReaction renders correctly (synthetic)", async () => {
+    renderEvents.length = 0
+
+    await adapter.onReaction!("ses_synthetic", {
+      emoji: "👍",
+      userId: "user_yevgeniy",
+      messageId: "msg_abc123",
+    })
+
+    const reactionEvent = renderEvents.find((e) => e.tag === "REACTION")
+    const pass = !!reactionEvent
+
+    narrate(
+      "onReaction renders reaction",
+      pass,
+      pass
+        ? `Debug adapter rendered: ${reactionEvent!.message}`
+        : "No REACTION render event found after calling onReaction.",
+      { renderedMessage: reactionEvent?.message }
+    )
+
+    expect(pass).toBe(true)
+  })
+
+  test("7. onSessionDeleted renders correctly (synthetic)", async () => {
+    renderEvents.length = 0
+
+    await adapter.onSessionDeleted!("ses_deleted_test")
+
+    const deletedEvent = renderEvents.find((e) => e.tag === "SESSION" && e.message.includes("deleted"))
+    const pass = !!deletedEvent
+
+    narrate(
+      "onSessionDeleted renders deletion",
+      pass,
+      pass
+        ? `Debug adapter rendered: ${deletedEvent!.message}`
+        : "No SESSION deletion render event found.",
+      { renderedMessage: deletedEvent?.message }
+    )
+
+    expect(pass).toBe(true)
+  })
 })

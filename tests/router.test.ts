@@ -262,6 +262,31 @@ describe("HeadlessRouter", () => {
     await client.disconnect()
   })
 
+  test("catches adapter callback errors without crashing router", async () => {
+    const client = createClient()
+    await client.connect()
+    const store = new SyncStore()
+
+    const throwingAdapter = makeAdapter("thrower", "throw-channel", async () => {
+      throw new Error("adapter exploded")
+    })
+    const healthy: string[] = []
+    const healthyAdapter = makeAdapter("healthy", "healthy-channel", async (_sid, text) => {
+      healthy.push(text)
+    })
+
+    const router = new HeadlessRouter({ client, store, adapters: [throwingAdapter, healthyAdapter] })
+    router.setSessionAdapter("session", "healthy")
+
+    store.processEvent({ type: "message.updated", properties: { info: makeUserMessage("msg-err", "hello") } })
+
+    await waitFor(() => healthy.length === 1)
+    expect(healthy[0]).toBe("hello")
+
+    await router.shutdown()
+    await client.disconnect()
+  })
+
   test("tracks prompt origins in FIFO order", async () => {
     const client = createClient()
     await client.connect()
