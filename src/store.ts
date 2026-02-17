@@ -18,6 +18,7 @@ import type {
   ProviderListResponse,
   QuestionRequest,
   Session,
+  SessionInfo,
   SessionStatus,
   Todo,
   VcsInfo,
@@ -70,10 +71,13 @@ type StoreEvents = {
   sessionStatus: { sessionID: string; status: DerivedSessionStatus }
   assistantMessage: { sessionID: string; message: Message; parts: Part[] }
   assistantMessageComplete: { sessionID: string; message: Message; parts: Part[] }
+  userMessage: { sessionID: string; message: Message }
   sessionError: { sessionID: string; error: Error }
   toast: { notification: ToastNotification }
   sessionCost: { sessionID: string; cost: number; tokens: TokenSummary }
   status: { status: SyncStoreStatus }
+  sessionCreated: { sessionID: string; session: SessionInfo }
+  sessionDeleted: { sessionID: string }
 }
 
 export class SyncStore extends TypedEmitter<StoreEvents> {
@@ -349,12 +353,16 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       case "session.updated": {
         const info = event.properties.info
         const result = Binary.search(this.state.session, info.id, (s) => s.id)
+        const wasFound = result.found
         if (result.found) {
           this.state.session[result.index] = info
         } else {
           this.state.session.splice(result.index, 0, info)
         }
         this.updateDerivedStatus(info.id)
+        if (!wasFound) {
+          this.emit("sessionCreated", { sessionID: info.id, session: this.toSessionInfo(info) })
+        }
         break
       }
 
@@ -364,6 +372,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
           this.state.session.splice(result.index, 1)
         }
         this.derivedStatus.delete(event.properties.info.id)
+        this.emit("sessionDeleted", { sessionID: event.properties.info.id })
         break
       }
 
@@ -392,6 +401,9 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
           }
         }
         this.emitAssistantMessage(info, previous)
+        if (info.role === "user") {
+          this.emit("userMessage", { sessionID, message: info })
+        }
         this.accumulateCost(info, previous)
         this.updateDerivedStatus(sessionID)
         break
@@ -655,5 +667,24 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       if (data?.message) return data.message
     }
     return "Session error"
+  }
+
+  private toSessionInfo(info: Session): SessionInfo {
+    const record = info as Record<string, unknown>
+    const shortId = typeof record.slug === "string" ? record.slug : undefined
+    const projectName = typeof record.projectName === "string"
+      ? record.projectName
+      : typeof record.projectID === "string"
+        ? record.projectID
+        : undefined
+    const directory = typeof record.directory === "string" ? record.directory : undefined
+    const title = typeof record.title === "string" ? record.title : undefined
+    return {
+      sessionId: info.id,
+      shortId,
+      projectName,
+      directory,
+      title,
+    }
   }
 }

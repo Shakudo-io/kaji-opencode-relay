@@ -1,12 +1,16 @@
 import type {
   AdapterCapabilities,
   DerivedSessionStatus,
+  FileAttachmentInfo,
   Message,
+  MessageOrigin,
   Part,
   PermissionReply,
   PermissionRequest,
   QuestionReply,
   QuestionRequest,
+  ReactionInfo,
+  SessionInfo,
   Todo,
   ToastNotification,
 } from "./types"
@@ -25,4 +29,9 @@ export interface ChannelAdapter {
   onTodoUpdate(sessionID: string, todos: Todo[]): void
   onSessionError(sessionID: string, error: Error): void
   onToast(notification: ToastNotification): void
+  onInboundMessage?(sessionID: string, text: string, origin: MessageOrigin): Promise<void>
+  onFileAttachment?(sessionID: string, file: FileAttachmentInfo): Promise<void>
+  onReaction?(sessionID: string, reaction: ReactionInfo): Promise<void>
+  onSessionCreated?(sessionID: string, session: SessionInfo): Promise<void>
+  onSessionDeleted?(sessionID: string): Promise<void>
 }

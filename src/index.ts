@@ -7,6 +7,7 @@ export { SyncStore, type TokenSummary } from "./store"
 export { HeadlessRouter, type HeadlessRouterConfig } from "./router"
 export { createFilePartInput, createFilePartInputFromBuffer, detectMimeType, filePartDataSize } from "./files"
 export type { FilePartInput, CreateFilePartOptions } from "./files"
+export type { MessageOrigin, FileAttachmentInfo, ReactionInfo, SessionInfo } from "./types"
 export * from "./schemas"
 export * from "./types"
 

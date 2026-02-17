@@ -1,3 +1,5 @@
+import type { FileAttachmentInfo, MessageOrigin, ReactionInfo, SessionInfo } from "../types"
+
 const isTTY = typeof process !== "undefined" && process.stdout?.isTTY === true
 
 const COLORS = {
@@ -31,6 +33,7 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   BOOTSTRAP: "cyan",
   SESSION: "cyan",
   MESSAGE: "white",
+  INBOUND: "white",
   TEXT: "white",
   TOOL: "magenta",
   PERMISSION: "yellow",
@@ -49,6 +52,7 @@ const TAG_COLORS: Record<string, keyof typeof COLORS> = {
   STEP: "dim",
   SUBTASK: "magenta",
   MCP: "cyan",
+  REACTION: "yellow",
 }
 
 export type RendererOptions = {
@@ -154,9 +158,25 @@ export class ConsoleRenderer {
     this.render("SESSION", info ? `${sessionID} — ${info}` : sessionID, { sessionID })
   }
 
+  sessionCreated(sessionID: string, session: SessionInfo): void {
+    const id = session.shortId ?? session.sessionId
+    const project = session.projectName ?? "unknown"
+    const directory = session.directory ?? "unknown"
+    this.render("SESSION", `Session created: ${id} — project: ${project}, dir: ${directory}`, { sessionID, session })
+  }
+
+  sessionDeleted(sessionID: string): void {
+    this.render("SESSION", `Session deleted: ${sessionID}`, { sessionID })
+  }
+
   userMessage(sessionID: string, text: string): void {
     const truncated = text.length > 120 ? text.slice(0, 120) + "..." : text
     this.render("MESSAGE", `▶ User: "${truncated}"`, { sessionID, role: "user", text })
+  }
+
+  inboundMessage(sessionID: string, text: string, origin: MessageOrigin): void {
+    const truncated = text.length > 120 ? text.slice(0, 120) + "..." : text
+    this.render("INBOUND", `[${origin.adapterId}/${origin.channel}] User: ${truncated}`, { sessionID, origin, text })
   }
 
   assistantText(sessionID: string, text: string): void {
@@ -222,6 +242,15 @@ export class ConsoleRenderer {
     this.render("FILE", `${name} (${mime}, ${sizeStr})`, { sessionID, mime, filename, sizeBytes })
   }
 
+  fileAttachment(sessionID: string, file: FileAttachmentInfo): void {
+    const sizeStr = typeof file.size === "number" ? this.formatBytes(file.size) : "unknown"
+    this.render("FILE", `📎 File: ${file.filename} (${file.mime}, ${sizeStr})`, { sessionID, file })
+  }
+
+  reaction(sessionID: string, reaction: ReactionInfo): void {
+    this.render("REACTION", `${reaction.emoji} by ${reaction.userId}`, { sessionID, reaction })
+  }
+
   modelInfo(sessionID: string, providerID: string, modelID: string, changed: boolean): void {
     const tag = changed ? "MODEL CHANGED" : "MODEL"
     this.render(tag, `${providerID}/${modelID}`, { sessionID, providerID, modelID, changed })
@@ -278,6 +307,12 @@ export class ConsoleRenderer {
     if (cost >= 0.01) return `$${cost.toFixed(2)}`
     if (cost >= 0.001) return `$${cost.toFixed(3)}`
     return `$${cost.toFixed(4)}`
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+    if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}KB`
+    return `${bytes}B`
   }
 
   private formatTokenBreakdown(tokens: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }): string {

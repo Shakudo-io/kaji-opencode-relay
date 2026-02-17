@@ -1,4 +1,4 @@
-import { noopLogger, type Logger, type PermissionReply, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
+import { noopLogger, type Logger, type Message, type MessageOrigin, type PermissionReply, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
 import type { ChannelAdapter } from "./adapter"
 import type { HeadlessClient } from "./client"
 import type { SyncStore } from "./store"
@@ -18,6 +18,7 @@ export class HeadlessRouter {
   private readonly adapters: Map<string, ChannelAdapter>
   private readonly sessionAdapters = new Map<string, string>()
   private readonly unsubscribers: Array<() => void> = []
+  private readonly pendingPromptOrigins = new Map<string, string[]>()
   private readonly timeoutMs: number
   private readonly logger: Logger
   private readonly defaultAdapterId?: string
@@ -59,6 +60,14 @@ export class HeadlessRouter {
     this.sessionAdapters.delete(sessionID)
   }
 
+  async promptWithOrigin(sessionID: string, text: string, adapterID: string, options?: Parameters<HeadlessClient["prompt"]>[2]): Promise<unknown> {
+    if (!this.adapters.has(adapterID)) {
+      throw new Error(`Adapter not registered: ${adapterID}`)
+    }
+    this.queuePromptOrigin(sessionID, adapterID)
+    return this.client.prompt(sessionID, text, options)
+  }
+
   private subscribe(): void {
     this.unsubscribers.push(
       this.store.on("permission", ({ sessionID, request }) => {
@@ -81,6 +90,22 @@ export class HeadlessRouter {
           .onAssistantMessageComplete(sessionID, message, parts)
           .catch((error) => this.logger.error("Adapter assistant completion failed", error))
       }),
+      this.store.on("userMessage", ({ sessionID, message }) => {
+        const adapter = this.getAdapter(sessionID)
+        if (!adapter || !adapter.onInboundMessage) return
+
+        const originAdapterId = this.shiftPromptOrigin(sessionID)
+        if (originAdapterId && originAdapterId === adapter.id) return
+
+        const origin = originAdapterId
+          ? this.resolveOrigin(originAdapterId)
+          : { adapterId: "tui", channel: "terminal" }
+        const text = this.resolveUserMessageText(sessionID, message)
+
+        adapter
+          .onInboundMessage(sessionID, text, origin)
+          .catch((error) => this.logger.error("Adapter inbound message failed", error))
+      }),
       this.store.on("sessionStatus", ({ sessionID, status }) => {
         const adapter = this.getAdapter(sessionID)
         if (!adapter) return
@@ -89,6 +114,21 @@ export class HeadlessRouter {
         } catch (error) {
           this.logger.error("Adapter session status failed", error)
         }
+      }),
+      this.store.on("sessionCreated", ({ sessionID, session }) => {
+        const adapter = this.getAdapter(sessionID)
+        if (!adapter || !adapter.onSessionCreated) return
+        adapter
+          .onSessionCreated(sessionID, session)
+          .catch((error) => this.logger.error("Adapter session created failed", error))
+      }),
+      this.store.on("sessionDeleted", ({ sessionID }) => {
+        const adapter = this.getAdapter(sessionID)
+        this.pendingPromptOrigins.delete(sessionID)
+        if (!adapter || !adapter.onSessionDeleted) return
+        adapter
+          .onSessionDeleted(sessionID)
+          .catch((error) => this.logger.error("Adapter session deleted failed", error))
       }),
       this.store.on("todo", ({ sessionID, todos }) => {
         const adapter = this.getAdapter(sessionID)
@@ -125,6 +165,52 @@ export class HeadlessRouter {
     if (mapped) return this.adapters.get(mapped)
     if (this.adapters.size === 1) return this.adapters.values().next().value
     return undefined
+  }
+
+  private queuePromptOrigin(sessionID: string, adapterID: string): void {
+    const queue = this.pendingPromptOrigins.get(sessionID)
+    if (queue) {
+      queue.push(adapterID)
+    } else {
+      this.pendingPromptOrigins.set(sessionID, [adapterID])
+    }
+  }
+
+  private shiftPromptOrigin(sessionID: string): string | undefined {
+    const queue = this.pendingPromptOrigins.get(sessionID)
+    if (!queue || queue.length === 0) return undefined
+    const origin = queue.shift()
+    if (queue.length === 0) {
+      this.pendingPromptOrigins.delete(sessionID)
+    }
+    return origin
+  }
+
+  private resolveOrigin(adapterId: string): MessageOrigin {
+    const adapter = this.adapters.get(adapterId)
+    if (adapter) {
+      return { adapterId, channel: adapter.channel }
+    }
+    return { adapterId, channel: "unknown" }
+  }
+
+  private resolveUserMessageText(sessionID: string, message: Message): string {
+    const parts = this.store.parts(message.id).filter((part) => part.type === "text")
+    const partText = parts
+      .map((part) => (part as { text?: string }).text)
+      .filter((text): text is string => typeof text === "string" && text.length > 0)
+      .join("")
+    if (partText.length > 0) return partText
+
+    const record = message as Record<string, unknown>
+    const summary = record.summary as Record<string, unknown> | undefined
+    const body = summary?.body
+    if (typeof body === "string" && body.length > 0) return body
+    const title = summary?.title
+    if (typeof title === "string" && title.length > 0) return title
+
+    this.logger.warn("User message missing text", { sessionID, messageID: message.id })
+    return ""
   }
 
   private async handlePermission(sessionID: string, request: PermissionRequest): Promise<void> {
