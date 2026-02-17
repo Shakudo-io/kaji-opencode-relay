@@ -1,6 +1,6 @@
 {
   "name": "kaji-opencode-relay",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Universal relay for OpenCode — route AI coding sessions to any channel",
   "license": "MIT",
   "type": "module",
@@ -22,7 +22,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting && tsc -p tsconfig.build.json",
+    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting && tsc -p tsconfig.build.json && node -e \"let f=require('fs'),p='dist/types.js',c=f.readFileSync(p,'utf8');c=c.replace(/^export \\{ noopLogger \\};\\s*$/m,'');f.writeFileSync(p,c);\"",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepublishOnly": "bun run build"
