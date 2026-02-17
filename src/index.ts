@@ -9,7 +9,7 @@ export { createFilePartInput, createFilePartInputFromBuffer, detectMimeType, fil
 export type { FilePartInput, CreateFilePartOptions } from "./files"
 export type { MessageOrigin, FileAttachmentInfo, ReactionInfo, SessionInfo, Logger, SSEEvent, DerivedSessionStatus, PermissionReply, QuestionReply, ToastNotification, AdapterCapabilities } from "./types"
 export { noopLogger } from "./types"
-export * from "./schemas"
+export { PermissionReplySchema, QuestionReplySchema, ToastNotificationSchema, AdapterCapabilitiesSchema, HeadlessClientConfigSchema } from "./schemas"
 
 import { HeadlessClient, type HeadlessClientConfig } from "./client"
 import type { ChannelAdapter } from "./adapter"
