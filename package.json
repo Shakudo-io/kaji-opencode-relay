@@ -1,6 +1,6 @@
 {
   "name": "kaji-opencode-relay",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Universal relay for OpenCode — route AI coding sessions to any channel",
   "license": "MIT",
   "type": "module",

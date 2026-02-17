@@ -7,24 +7,21 @@ const distDir = path.join(__dirname, '..', 'dist');
 
 function fixFile(filePath) {
   if (!fs.existsSync(filePath) || !filePath.endsWith('.js')) return;
-  const content = fs.readFileSync(filePath, 'utf8');
-  const lines = content.split('\n');
+  let content = fs.readFileSync(filePath, 'utf8');
   
-  const exportBlockIndices = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('export {')) {
-      exportBlockIndices.push(i);
-    }
-  }
+  const singleLineExportRe = /^export \{[^}]+\};\s*$/gm;
+  const matches = [...content.matchAll(singleLineExportRe)];
   
-  if (exportBlockIndices.length <= 1) return;
+  if (matches.length === 0) return;
   
-  // Remove all but the first export block
-  for (let j = exportBlockIndices.length - 1; j >= 1; j--) {
-    lines.splice(exportBlockIndices[j], 1);
-  }
+  const lastMatch = matches[matches.length - 1];
+  const before = content.slice(0, lastMatch.index);
+  const hasBlockExport = /export \{\n/m.test(before);
   
-  fs.writeFileSync(filePath, lines.join('\n'));
+  if (!hasBlockExport) return;
+  
+  content = content.slice(0, lastMatch.index) + content.slice(lastMatch.index + lastMatch[0].length);
+  fs.writeFileSync(filePath, content);
   console.log(`Fixed duplicate exports in ${path.basename(filePath)}`);
 }
 
