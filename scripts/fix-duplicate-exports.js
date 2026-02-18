@@ -5,24 +5,54 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const distDir = path.join(__dirname, '..', 'dist');
 
+function extractExportNames(exportLine) {
+  const match = exportLine.match(/export\s*\{([^}]+)\}/);
+  if (!match) return new Set();
+  return new Set(match[1].split(',').map(n => n.trim()).filter(Boolean));
+}
+
 function fixFile(filePath) {
   if (!fs.existsSync(filePath) || !filePath.endsWith('.js')) return;
-  let content = fs.readFileSync(filePath, 'utf8');
-  
-  const singleLineExportRe = /^export \{[^}]+\};\s*$/gm;
-  const matches = [...content.matchAll(singleLineExportRe)];
-  
-  if (matches.length === 0) return;
-  
-  const lastMatch = matches[matches.length - 1];
-  const before = content.slice(0, lastMatch.index);
-  const hasBlockExport = /export \{\n/m.test(before);
-  
-  if (!hasBlockExport) return;
-  
-  content = content.slice(0, lastMatch.index) + content.slice(lastMatch.index + lastMatch[0].length);
-  fs.writeFileSync(filePath, content);
-  console.log(`Fixed duplicate exports in ${path.basename(filePath)}`);
+  const content = fs.readFileSync(filePath, 'utf8');
+  const lines = content.split('\n');
+
+  const exportBlocks = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (!lines[i].startsWith('export {')) continue;
+    
+    if (lines[i].includes('}')) {
+      exportBlocks.push({ start: i, end: i, names: extractExportNames(lines[i]) });
+    } else {
+      let blockContent = lines[i];
+      let j = i + 1;
+      while (j < lines.length && !lines[j].includes('}')) {
+        blockContent += ' ' + lines[j];
+        j++;
+      }
+      if (j < lines.length) blockContent += ' ' + lines[j];
+      exportBlocks.push({ start: i, end: j, names: extractExportNames(blockContent) });
+    }
+  }
+
+  if (exportBlocks.length <= 1) return;
+
+  const allNames = new Set();
+  for (const block of exportBlocks) {
+    for (const name of block.names) allNames.add(name);
+  }
+
+  for (let i = exportBlocks.length - 1; i >= 0; i--) {
+    const block = exportBlocks[i];
+    for (let j = block.end; j >= block.start; j--) {
+      lines.splice(j, 1);
+    }
+  }
+
+  const mergedExport = `export {\n  ${[...allNames].join(',\n  ')}\n};`;
+  lines.push(mergedExport, '');
+
+  fs.writeFileSync(filePath, lines.join('\n'));
+  console.log(`Merged ${exportBlocks.length} export blocks (${allNames.size} names) in ${path.basename(filePath)}`);
 }
 
 function walk(dir) {
