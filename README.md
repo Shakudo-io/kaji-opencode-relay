@@ -252,38 +252,200 @@ store.on("assistantMessage" | "assistantMessageComplete" | "permission" | "quest
 
 ## Debug Adapter
 
-Built-in CLI for testing against a live OpenCode server:
+The debug adapter is both a **CLI tool** for testing against a live OpenCode server and a **reference implementation** of the `ChannelAdapter` interface. Use it to observe events, test permission flows, or as the starting point for building your own adapter.
+
+### CLI Usage
 
 ```bash
-bun run bin/debug.ts --url http://localhost:4096                    # observe all events
-bun run bin/debug.ts --url http://localhost:4096 --session ses_abc  # filter to one session
-bun run bin/debug.ts --url http://localhost:4096 --interactive      # manual permission/question responses
-bun run bin/debug.ts --url http://localhost:4096 --json             # NDJSON for piping
-bun run bin/debug.ts --url http://localhost:4096 --verbose          # include raw SSE events
+# Observe all events from a running OpenCode server
+bun run bin/debug.ts --url http://localhost:4096
+
+# Filter to a specific session
+bun run bin/debug.ts --url http://localhost:4096 --session ses_abc
+
+# Interactive mode — manually approve/reject permissions and answer questions
+bun run bin/debug.ts --url http://localhost:4096 --interactive
+
+# JSON output (NDJSON) — for piping to jq, log aggregators, or other tools
+bun run bin/debug.ts --url http://localhost:4096 --json
+
+# Verbose — include raw SSE events from the server
+bun run bin/debug.ts --url http://localhost:4096 --verbose
+
+# Combine flags
+bun run bin/debug.ts --url http://localhost:4096 --interactive --verbose
 ```
 
-Output:
+If installed globally (`bun add -g kaji-opencode-relay`), use:
+```bash
+kaji-opencode-relay-debug --url http://localhost:4096
 ```
-[CONNECTED]    Connected to OpenCode at http://localhost:4096
-[BOOTSTRAP]    Loaded 15 providers, 34 agents, 145 sessions
-[MCP]          17 servers, 16 connected, 1 disabled
-  ✅ websearch (connected)
-  ✅ mattermost (connected)
-  ⏸️ graphiti-memory (disabled)
-[MODEL]        anthropic/claude-opus-4-6
-[THINKING]     Let me check the project structure first...
-[TOOL]         bash: ls -la src/ (running)
-[TOOL]         bash: completed
-[TEXT]         Here are the TypeScript files...
-[SUBTASK]      🕵️ developer — "implement auth" (running) [ses_abc123]
-[SUBTASK]      ✅ developer — "implement auth" (6.8s) [ses_abc123]
-[STEP]         $0.01 | 456 in / 123 out / 200 cache
-[COST]         $0.03 | 1.2K in / 567 out / 89 reasoning / 45 cache
-[FILE]         report.txt (text/plain, 1.2KB)
-[ERROR]        UnknownError: certificate verification error
-[SESSION]      Total: $0.45 | 12.3K tokens
-[STATUS]       ses_abc1 → idle — waiting for input
+
+### CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--url <url>` | **(Required)** OpenCode server URL |
+| `--session <id>` | Filter events to a specific session ID |
+| `--directory <path>` | Set working directory for the client |
+| `--interactive` | Prompt for permission/question responses instead of auto-approving |
+| `--json` | Output NDJSON instead of pretty-printed lines |
+| `--verbose` | Include raw SSE events in output |
+
+### Input Commands
+
+Once running, you can type prompts directly. The CLI also supports:
+
+| Command | Description |
+|---------|-------------|
+| *(any text)* | Send as a prompt to the current session |
+| `/attach <path>` | Queue a file attachment for the next prompt |
+
+If no session is specified with `--session`, the CLI auto-selects the most recent session or creates a new one on first prompt.
+
+### Pretty Output
+
 ```
+[14:32:01] [CONNECTED]    Connected to OpenCode at http://localhost:4096
+[14:32:01] [BOOTSTRAP]    Loaded 15 providers, 34 agents, 145 sessions
+[14:32:01] [MCP]          17 servers, 16 connected, 1 disabled
+             ✅ websearch (connected)
+             ✅ mattermost (connected)
+             ⏸️ graphiti-memory (disabled)
+[14:32:05] [MODEL]        anthropic/claude-opus-4-6
+[14:32:05] [THINKING]     Let me check the project structure first...
+[14:32:06] [TOOL]         bash: running
+[14:32:07] [TOOL]         bash: completed
+[14:32:08] [TEXT]          Here are the TypeScript files...
+[14:32:10] [SUBTASK]      🕵️ developer — "implement auth" (running) [ses_abc123]
+[14:32:17] [SUBTASK]      ✅ developer — "implement auth" (6.8s) [ses_abc123]
+[14:32:17] [STEP]         $0.01 | 456 in / 123 out / 200 cache
+[14:32:18] [COST]         $0.03 | 1.2K in / 567 out / 89 reasoning / 45 cache
+[14:32:18] [FILE]         report.txt (text/plain, 1.2KB)
+[14:32:18] [COMPLETE]     ses_abc1 — response complete
+[14:32:18] [SESSION]      Total: $0.45 | 12.3K tokens
+[14:32:18] [STATUS]       ses_abc1 → idle — waiting for input
+```
+
+### JSON Output Schema
+
+With `--json`, each line is a JSON object. The `type` field identifies the event:
+
+```jsonc
+// Connection events
+{"ts":"2026-02-18T14:32:01.000Z","type":"connected","message":"Connected to OpenCode at http://localhost:4096"}
+
+// Text from the assistant
+{"ts":"...","type":"text","message":"Here are the files...","sessionID":"ses_abc1","role":"assistant"}
+
+// Tool execution
+{"ts":"...","type":"tool","message":"bash: running","sessionID":"ses_abc1","tool":"bash","status":"running"}
+
+// Subtask delegation
+{"ts":"...","type":"subtask","message":"developer — \"implement auth\" (running)","sessionID":"ses_abc1","agentType":"developer","description":"implement auth","status":"running","childSessionId":"ses_def2"}
+
+// Cost per message
+{"ts":"...","type":"cost","message":"$0.03 | 1.2K in / 567 out","sessionID":"ses_abc1","cost":0.03,"tokens":{"input":1200,"output":567,"reasoning":89,"cacheRead":45,"cacheWrite":0}}
+
+// Session summary (on idle)
+{"ts":"...","type":"session","message":"Total: $0.45 | 12.3K tokens","sessionID":"ses_abc1","totalCost":0.45,"totalTokens":12300,"tokens":{"input":8000,"output":3000,"reasoning":1000,"cacheRead":300,"cacheWrite":0}}
+
+// Permission request
+{"ts":"...","type":"permission","message":"bash → once","sessionID":"ses_abc1","permission":"bash","reply":"once"}
+
+// File attachment
+{"ts":"...","type":"file","message":"report.txt (text/plain, 1.2KB)","sessionID":"ses_abc1","mime":"text/plain","filename":"report.txt","sizeBytes":1234}
+
+// Error
+{"ts":"...","type":"error","message":"ses_abc1: UnknownError: certificate verification error","sessionID":"ses_abc1"}
+```
+
+### Permission & Question Policies
+
+The `DebugAdapter` supports configurable policies for handling permissions and questions:
+
+| Policy | Behavior |
+|--------|----------|
+| `approve-all` (default) | Auto-approve every permission request with `"once"` |
+| `reject-all` | Auto-reject every permission request |
+| `interactive` | Prompt in the terminal for each request (requires `--interactive`) |
+
+| Policy | Behavior |
+|--------|----------|
+| `first-option` (default) | Auto-select the first option for every question |
+| `interactive` | Prompt in the terminal for each question (requires `--interactive`) |
+
+### Programmatic Usage
+
+Import and use the debug adapter in your own code — useful for testing, CI pipelines, or building on top of it:
+
+```typescript
+import { createHeadless } from "kaji-opencode-relay"
+import { DebugAdapter } from "kaji-opencode-relay/debug"
+import { ConsoleRenderer } from "kaji-opencode-relay/debug"
+
+const renderer = new ConsoleRenderer({ json: true, color: false })
+const adapter = new DebugAdapter({
+  renderer,
+  permissionPolicy: "approve-all",
+  questionPolicy: "first-option",
+})
+
+const { client, store, router } = createHeadless({
+  client: { url: "http://localhost:4096" },
+  adapters: [adapter],
+})
+
+await client.connect()
+await client.bootstrap(store)
+
+// All events now stream through the adapter to the renderer
+const result = await client.createSession()
+await client.prompt(result.data.id, "List all files")
+```
+
+For interactive permission handling in your own code:
+
+```typescript
+const adapter = new DebugAdapter({
+  renderer,
+  permissionPolicy: "interactive",
+  onInteractivePermission: async (sessionID, request) => {
+    // Your custom logic here
+    const approved = await askUserSomehow(request)
+    return { reply: approved ? "once" : "reject" }
+  },
+  questionPolicy: "interactive",
+  onInteractiveQuestion: async (sessionID, request) => {
+    const answers = await getAnswersSomehow(request)
+    return { answers }
+  },
+})
+```
+
+### Using the Debug Adapter as a Template
+
+The debug adapter is the best starting point for building a new channel adapter. Here's what to keep and what to change:
+
+**Keep:**
+- The `onAssistantMessage` part-type switch — it handles all 6 part types correctly
+- The subtask tool rendering logic (`renderSubtaskTool`) — subtask events are tricky
+- The `onAssistantMessageComplete` cost/token extraction
+- The error handling on `message.error`
+
+**Replace:**
+- `ConsoleRenderer` calls → your channel's message sending (HTTP API, WebSocket, etc.)
+- `process.stdout.write` → your channel's output mechanism
+- Permission/question handlers → your channel's interactive prompts (buttons, reactions, thread replies)
+- `capabilities` object → what your channel actually supports
+
+**Add:**
+- Message buffering/chunking for channels with rate limits
+- Thread/conversation mapping for channels with threading
+- User authentication for multi-user channels
+- Reconnection handling for your channel's connection
+
+See the `ChannelAdapter` interface in `src/adapter.ts` for the full contract.
 
 ## Package Exports
 
