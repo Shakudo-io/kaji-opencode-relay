@@ -381,13 +381,31 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       }
 
       case "session.deleted": {
-        const result = Binary.search(this.state.session, event.properties.info.id, (s) => s.id)
+        const id = event.properties.info.id
+        const result = Binary.search(this.state.session, id, (s) => s.id)
         if (result.found) {
           this.state.session.splice(result.index, 1)
         }
-        this.derivedStatus.delete(event.properties.info.id)
-        this.logger.info("store.session.deleted", { sessionID: event.properties.info.id })
-        this.emit("sessionDeleted", { sessionID: event.properties.info.id })
+        this.derivedStatus.delete(id)
+
+        const messages = this.state.message[id]
+        if (messages) {
+          for (const msg of messages) {
+            delete this.state.part[msg.id]
+          }
+        }
+        delete this.state.message[id]
+        delete this.state.permission[id]
+        delete this.state.question[id]
+        delete this.state.todo[id]
+        delete this.state.session_diff[id]
+        delete this.state.session_status[id]
+        delete this.state.session_cost[id]
+        delete this.state.session_tokens[id]
+        this.fullSyncedSessions.delete(id)
+
+        this.logger.info("store.session.cleanup", { sessionID: id })
+        this.emit("sessionDeleted", { sessionID: id })
         break
       }
 

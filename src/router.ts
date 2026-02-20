@@ -125,6 +125,7 @@ export class HeadlessRouter {
       this.store.on("sessionDeleted", ({ sessionID }) => {
         const adapter = this.getAdapter(sessionID)
         this.pendingPromptOrigins.delete(sessionID)
+        this.sessionAdapters.delete(sessionID)
         if (!adapter || !adapter.onSessionDeleted) return
         adapter
           .onSessionDeleted(sessionID)
