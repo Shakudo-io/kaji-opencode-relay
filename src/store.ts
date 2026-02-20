@@ -6,6 +6,7 @@ import type {
   FileDiff,
   FormatterStatus,
   LspStatus,
+  Logger,
   McpResource,
   McpStatus,
   Message,
@@ -22,8 +23,10 @@ import type {
   SessionStatus,
   Todo,
   VcsInfo,
+  ContextualLogger,
 } from "./types"
 import type { DerivedSessionStatus, ToastNotification } from "./types"
+import { createContextualLogger, noopContextualLogger } from "./types"
 import { Binary } from "./binary"
 import { TypedEmitter } from "./events"
 
@@ -83,11 +86,13 @@ type StoreEvents = {
 export class SyncStore extends TypedEmitter<StoreEvents> {
   state: SyncState
   private sdk: OpencodeClient | undefined
+  private readonly logger: ContextualLogger
   private readonly derivedStatus = new Map<string, DerivedSessionStatus>()
   private readonly fullSyncedSessions = new Set<string>()
 
-  constructor() {
+  constructor(logger?: Logger) {
     super()
+    this.logger = logger ? createContextualLogger(logger).child({ component: "store" }) : noopContextualLogger
     this.state = {
       provider_next: {
         all: [],
@@ -197,6 +202,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
   }
 
   async bootstrap(sdk: OpencodeClient): Promise<void> {
+    this.logger.info("store.bootstrap.start")
     this.sdk = sdk
     const start = Date.now() - 30 * 24 * 60 * 60 * 1000
     const sessionListPromise = sdk.session.list({ start })
@@ -225,6 +231,11 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
     this.state.agent = agents
     this.state.config = config
     this.state.session = sessions
+    this.logger.info("store.bootstrap.primary", {
+      sessions: sessions.length,
+      providers: providers.providers.length,
+      agents: agents.length,
+    })
 
     if (this.state.status !== "complete") {
       this.state.status = "partial"
@@ -268,6 +279,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       this.emit("status", { status: this.state.status })
     })().catch((error: unknown) => {
       const normalized = error instanceof Error ? error : new Error(String(error))
+      this.logger.error("store.bootstrap.secondary.failed", { error: normalized.message })
       this.emit("toast", {
         notification: { variant: "error", message: `Bootstrap failed: ${normalized.message}` },
       })
@@ -277,6 +289,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
   processEvent(event: Event): void {
     switch (event.type) {
       case "server.instance.disposed":
+        this.logger.warn("store.server.disposed")
         this.state.status = "loading"
         this.fullSyncedSessions.clear()
         this.derivedStatus.clear()
@@ -361,6 +374,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
         }
         this.updateDerivedStatus(info.id)
         if (!wasFound) {
+          this.logger.info("store.session.created", { sessionID: info.id })
           this.emit("sessionCreated", { sessionID: info.id, session: this.toSessionInfo(info) })
         }
         break
@@ -372,6 +386,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
           this.state.session.splice(result.index, 1)
         }
         this.derivedStatus.delete(event.properties.info.id)
+        this.logger.info("store.session.deleted", { sessionID: event.properties.info.id })
         this.emit("sessionDeleted", { sessionID: event.properties.info.id })
         break
       }
@@ -397,6 +412,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
         while (messages.length > 100) {
           const oldest = messages.shift()
           if (oldest) {
+            this.logger.debug("store.message.evicted", { sessionID, messageID: oldest.id })
             delete this.state.part[oldest.id]
           }
         }
@@ -501,6 +517,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       case "session.error": {
         if (!event.properties.sessionID) break
         const description = this.describeSessionError(event.properties.error)
+        this.logger.warn("store.session.error", { sessionID: event.properties.sessionID, error: description })
         this.emit("sessionError", {
           sessionID: event.properties.sessionID,
           error: new Error(description),
