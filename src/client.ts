@@ -2,6 +2,7 @@ import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk/v2"
 import { TypedEmitter, type Unsubscribe } from "./events"
 import type {
   Event,
+  ContextualLogger,
   Logger,
   Message,
   PermissionReply,
@@ -9,7 +10,7 @@ import type {
   QuestionRequest,
   Session,
 } from "./types"
-import { noopLogger } from "./types"
+import { createContextualLogger, noopLogger } from "./types"
 
 export type SdkClient = OpencodeClient
 export type SdkFactoryConfig = { baseUrl: string; signal?: AbortSignal; directory?: string; fetch?: typeof fetch; headers?: RequestInit["headers"] }
@@ -58,7 +59,7 @@ type EventMap = {
 
 export class HeadlessClient extends TypedEmitter<ClientEventMap> {
   private readonly config: HeadlessClientConfig
-  private readonly logger: Logger
+  private readonly logger: ContextualLogger
   private readonly batchInterval: number
   private readonly eventEmitter = new TypedEmitter<EventMap>()
   private queue: SSEEvent[] = []
@@ -73,7 +74,10 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
   constructor(config: HeadlessClientConfig) {
     super()
     this.config = config
-    this.logger = config.logger ?? noopLogger
+    this.logger = createContextualLogger(config.logger ?? noopLogger).child({
+      component: "client",
+      url: config.url,
+    })
     this.batchInterval = config.batchInterval ?? 16
   }
 
@@ -124,12 +128,13 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
       this.abortController = undefined
       const err = error instanceof Error ? error : new Error(String(error))
       this.emit("error", { error: err })
-      this.logger.error("HeadlessClient connect failed", err)
+      this.logger.error("client.connect.failed", { error: err.message })
       throw err
     }
     this.connected = true
 
     this.emit("connected", { url: this.config.url })
+    this.logger.info("client.connected", { url: this.config.url })
 
     if (this.config.events) {
       this.unsubscribe = this.config.events.on((event) => {
@@ -164,6 +169,7 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     this.lastFlush = 0
 
     this.emit("disconnected", { url: this.config.url })
+    this.logger.info("client.disconnected", { url: this.config.url })
   }
 
   async bootstrap(store: { bootstrap: (sdk: OpencodeClient) => Promise<void> }): Promise<void> {
@@ -171,11 +177,13 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
       throw new Error("HeadlessClient not connected")
     }
     try {
+      const start = Date.now()
       await store.bootstrap(this._sdk)
+      this.logger.info("client.bootstrap.complete", { durationMs: Date.now() - start })
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error))
       this.emit("error", { error: err })
-      this.logger.error("HeadlessClient bootstrap failed", err)
+      this.logger.error("client.bootstrap.failed", { error: err.message })
     }
   }
 
@@ -325,8 +333,9 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
     while (!abort.signal.aborted) {
       if (attempt > 0) {
         this.emit("reconnecting", { attempt })
-        this.logger.warn("HeadlessClient reconnecting", { attempt })
-        await this.delay(this.getBackoffDelay(attempt))
+        const backoffMs = this.getBackoffDelay(attempt)
+        this.logger.warn("client.reconnecting", { attempt, backoffMs })
+        await this.delay(backoffMs)
         if (abort.signal.aborted) break
       }
 
@@ -335,6 +344,7 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
 
         if (attempt > 0) {
           this.emit("reconnected", { attempt })
+          this.logger.info("client.reconnected", { attempt })
         }
         attempt = 0
 
@@ -349,7 +359,7 @@ export class HeadlessClient extends TypedEmitter<ClientEventMap> {
       } catch (error) {
         if (abort.signal.aborted) break
         const err = error instanceof Error ? error : new Error(String(error))
-        this.logger.error("HeadlessClient SSE error", err)
+        this.logger.error("client.sse.error", { error: err.message, attempt })
         this.emit("error", { error: err })
         attempt += 1
       }

@@ -40,6 +40,33 @@ export const noopLogger: Logger = {
   error: () => undefined,
 }
 
+export interface ContextualLogger extends Logger {
+  child(context: Record<string, unknown>): ContextualLogger
+}
+
+export const createContextualLogger = (
+  logger: Logger,
+  context: Record<string, unknown> = {},
+): ContextualLogger => {
+  const baseContext = { ...context }
+  return {
+    debug: (msg, ...args) => logger.debug(msg, ...args, baseContext),
+    info: (msg, ...args) => logger.info(msg, ...args, baseContext),
+    warn: (msg, ...args) => logger.warn(msg, ...args, baseContext),
+    error: (msg, ...args) => logger.error(msg, ...args, baseContext),
+    child: (childContext) =>
+      createContextualLogger(logger, { ...baseContext, ...childContext }),
+  }
+}
+
+export const noopContextualLogger: ContextualLogger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  child: () => noopContextualLogger,
+}
+
 export type SSEEvent = Event
 
 export type DerivedSessionStatus = "idle" | "working" | "compacting"

@@ -1,4 +1,4 @@
-import { noopLogger, type Logger, type Message, type MessageOrigin, type PermissionReply, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
+import { createContextualLogger, noopContextualLogger, type ContextualLogger, type Logger, type Message, type MessageOrigin, type PermissionReply, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
 import type { ChannelAdapter } from "./adapter"
 import type { HeadlessClient } from "./client"
 import type { SyncStore } from "./store"
@@ -20,7 +20,7 @@ export class HeadlessRouter {
   private readonly unsubscribers: Array<() => void> = []
   private readonly pendingPromptOrigins = new Map<string, string[]>()
   private readonly timeoutMs: number
-  private readonly logger: Logger
+  private readonly logger: ContextualLogger
   private readonly defaultAdapterId?: string
 
   constructor(config: HeadlessRouterConfig) {
@@ -29,7 +29,7 @@ export class HeadlessRouter {
     this.adapters = new Map(config.adapters.map((adapter) => [adapter.id, adapter]))
     this.defaultAdapterId = config.defaultAdapterId
     this.timeoutMs = config.timeoutMs ?? 5 * 60 * 1000
-    this.logger = config.logger ?? noopLogger
+    this.logger = config.logger ? createContextualLogger(config.logger).child({ component: "router" }) : noopContextualLogger
     this.subscribe()
   }
 
@@ -81,14 +81,14 @@ export class HeadlessRouter {
         if (!adapter) return
         adapter
           .onAssistantMessage(sessionID, message, parts)
-          .catch((error) => this.logger.error("Adapter assistant message failed", error))
+          .catch((error) => this.logger.error("router.adapter.failed", { method: "onAssistantMessage", sessionID, error: String(error) }))
       }),
       this.store.on("assistantMessageComplete", ({ sessionID, message, parts }) => {
         const adapter = this.getAdapter(sessionID)
         if (!adapter) return
         adapter
           .onAssistantMessageComplete(sessionID, message, parts)
-          .catch((error) => this.logger.error("Adapter assistant completion failed", error))
+          .catch((error) => this.logger.error("router.adapter.failed", { method: "onAssistantMessageComplete", sessionID, error: String(error) }))
       }),
       this.store.on("userMessage", ({ sessionID, message }) => {
         const adapter = this.getAdapter(sessionID)
@@ -104,7 +104,7 @@ export class HeadlessRouter {
 
         adapter
           .onInboundMessage(sessionID, text, origin)
-          .catch((error) => this.logger.error("Adapter inbound message failed", error))
+          .catch((error) => this.logger.error("router.adapter.failed", { method: "onInboundMessage", sessionID, error: String(error) }))
       }),
       this.store.on("sessionStatus", ({ sessionID, status }) => {
         const adapter = this.getAdapter(sessionID)
@@ -112,7 +112,7 @@ export class HeadlessRouter {
         try {
           adapter.onSessionStatus(sessionID, status)
         } catch (error) {
-          this.logger.error("Adapter session status failed", error)
+          this.logger.error("router.adapter.failed", { method: "onSessionStatus", sessionID, error: String(error) })
         }
       }),
       this.store.on("sessionCreated", ({ sessionID, session }) => {
@@ -120,15 +120,16 @@ export class HeadlessRouter {
         if (!adapter || !adapter.onSessionCreated) return
         adapter
           .onSessionCreated(sessionID, session)
-          .catch((error) => this.logger.error("Adapter session created failed", error))
+          .catch((error) => this.logger.error("router.adapter.failed", { method: "onSessionCreated", sessionID, error: String(error) }))
       }),
       this.store.on("sessionDeleted", ({ sessionID }) => {
         const adapter = this.getAdapter(sessionID)
         this.pendingPromptOrigins.delete(sessionID)
+        this.sessionAdapters.delete(sessionID)
         if (!adapter || !adapter.onSessionDeleted) return
         adapter
           .onSessionDeleted(sessionID)
-          .catch((error) => this.logger.error("Adapter session deleted failed", error))
+          .catch((error) => this.logger.error("router.adapter.failed", { method: "onSessionDeleted", sessionID, error: String(error) }))
       }),
       this.store.on("todo", ({ sessionID, todos }) => {
         const adapter = this.getAdapter(sessionID)
@@ -136,7 +137,7 @@ export class HeadlessRouter {
         try {
           adapter.onTodoUpdate(sessionID, todos)
         } catch (error) {
-          this.logger.error("Adapter todo update failed", error)
+          this.logger.error("router.adapter.failed", { method: "onTodoUpdate", sessionID, error: String(error) })
         }
       }),
       this.store.on("sessionError", ({ sessionID, error }) => {
@@ -145,7 +146,7 @@ export class HeadlessRouter {
         try {
           adapter.onSessionError(sessionID, error)
         } catch (adapterError) {
-          this.logger.error("Adapter session error failed", adapterError)
+          this.logger.error("router.adapter.failed", { method: "onSessionError", sessionID, error: String(adapterError) })
         }
       }),
       this.store.on("toast", ({ notification }) => {
@@ -153,7 +154,7 @@ export class HeadlessRouter {
           try {
             adapter.onToast(notification)
           } catch (error) {
-            this.logger.error("Adapter toast failed", error)
+            this.logger.error("router.adapter.failed", { method: "onToast", error: String(error) })
           }
         }
       }),
@@ -209,21 +210,27 @@ export class HeadlessRouter {
     const title = summary?.title
     if (typeof title === "string" && title.length > 0) return title
 
-    this.logger.warn("User message missing text", { sessionID, messageID: message.id })
+    this.logger.warn("router.user.message.empty", { sessionID, messageID: message.id })
     return ""
   }
 
   private async handlePermission(sessionID: string, request: PermissionRequest): Promise<void> {
     const adapter = this.getAdapter(sessionID)
     if (!adapter) {
+      this.logger.warn("router.permission.auto-rejected", { sessionID, requestID: request.id, reason: "no adapter" })
       await this.replyPermission(sessionID, request.id, { reply: "reject" })
       return
     }
     try {
+      this.logger.info("router.permission.dispatch", { sessionID, requestID: request.id, adapterID: adapter.id })
       const reply = await this.withTimeout(adapter.onPermissionRequest(sessionID, request), "permission")
       await this.replyPermission(sessionID, request.id, reply)
     } catch (error) {
-      this.logger.error("Adapter permission failed", error)
+      const errorMessage = String(error)
+      if (errorMessage.includes("timed out")) {
+        this.logger.warn("router.permission.timeout", { sessionID, requestID: request.id })
+      }
+      this.logger.error("router.permission.failed", { sessionID, requestID: request.id, error: errorMessage })
       await this.replyPermission(sessionID, request.id, { reply: "reject" })
     }
   }
@@ -231,14 +238,16 @@ export class HeadlessRouter {
   private async handleQuestion(sessionID: string, request: QuestionRequest): Promise<void> {
     const adapter = this.getAdapter(sessionID)
     if (!adapter) {
+      this.logger.warn("router.question.auto-rejected", { sessionID, requestID: request.id, reason: "no adapter" })
       await this.rejectQuestion(sessionID, request.id)
       return
     }
     try {
+      this.logger.info("router.question.dispatch", { sessionID, requestID: request.id, adapterID: adapter.id })
       const reply = await this.withTimeout(adapter.onQuestionRequest(sessionID, request), "question")
       await this.replyQuestion(sessionID, request.id, reply)
     } catch (error) {
-      this.logger.error("Adapter question failed", error)
+      this.logger.error("router.question.failed", { sessionID, requestID: request.id, error: String(error) })
       await this.rejectQuestion(sessionID, request.id)
     }
   }
