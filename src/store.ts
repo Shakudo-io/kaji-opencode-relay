@@ -89,6 +89,7 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
   private readonly logger: ContextualLogger
   private readonly derivedStatus = new Map<string, DerivedSessionStatus>()
   private readonly fullSyncedSessions = new Set<string>()
+  private diagnosticTimer: ReturnType<typeof setInterval> | undefined
 
   constructor(logger?: Logger) {
     super()
@@ -552,6 +553,30 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
     get: (sessionID: string) => this.getSession(sessionID),
     status: (sessionID: string) => this.getSessionStatus(sessionID),
     sync: async (sdk: OpencodeClient, sessionID: string) => this.syncSession(sdk, sessionID),
+  }
+
+  startDiagnostics(intervalMs: number): void {
+    this.stopDiagnostics()
+    this.diagnosticTimer = setInterval(() => {
+      this.logger.debug("store.diagnostics", {
+        sessions: this.state.session.length,
+        messageKeys: Object.keys(this.state.message).length,
+        partKeys: Object.keys(this.state.part).length,
+        permissionKeys: Object.keys(this.state.permission).length,
+        questionKeys: Object.keys(this.state.question).length,
+        todoKeys: Object.keys(this.state.todo).length,
+        costKeys: Object.keys(this.state.session_cost).length,
+        tokenKeys: Object.keys(this.state.session_tokens).length,
+        syncedSessions: this.fullSyncedSessions.size,
+      })
+    }, intervalMs)
+  }
+
+  stopDiagnostics(): void {
+    if (this.diagnosticTimer) {
+      clearInterval(this.diagnosticTimer)
+      this.diagnosticTimer = undefined
+    }
   }
 
   private getSession(sessionID: string): Session | undefined {
