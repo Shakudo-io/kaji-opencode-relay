@@ -1,24 +1,24 @@
 {
   "name": "kaji-opencode-relay",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Universal relay for OpenCode — route AI coding sessions to any channel",
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./types": "./dist/types.js",
-    "./adapter": "./dist/adapter.js",
-    "./store": "./dist/store.js",
-    "./schemas": "./dist/schemas.js",
-    "./debug": "./dist/debug/adapter.js",
-    "./render": "./dist/render.js"
+    ".": "./dist/src/index.js",
+    "./types": "./dist/src/types.js",
+    "./adapter": "./dist/src/adapter.js",
+    "./store": "./dist/src/store.js",
+    "./schemas": "./dist/src/schemas.js",
+    "./debug": "./dist/src/debug/adapter.js",
+    "./render": "./dist/src/render.js"
   },
   "bin": {
     "kaji-opencode-relay-debug": "./bin/debug.ts"
   },
   "types": "./dist/index.d.ts",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "main": "./dist/src/index.js",
+  "module": "./dist/src/index.js",
   "files": [
     "dist"
   ],
