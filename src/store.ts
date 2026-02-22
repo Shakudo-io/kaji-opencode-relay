@@ -515,8 +515,116 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
 
   readonly session = {
     get: (sessionID: string) => this.getSession(sessionID),
+    /** @deprecated Use store.sessionStatus(id) instead. Returns "idle" for unknown sessions (lenient). */
     status: (sessionID: string) => this.getSessionStatus(sessionID),
     sync: async (sdk: OpencodeClient, sessionID: string) => this.syncSession(sdk, sessionID),
+  }
+
+  private requireSession(sessionId: string): void {
+    const match = Binary.search(this.state.session, sessionId, (s) => s.id)
+    if (!match.found) throw new Error(`Session ${sessionId} not found`)
+  }
+
+  private getLastAssistantMessage(sessionId: string): Message | undefined {
+    return (this.state.message[sessionId] ?? []).filter((m) => m.role === "assistant").at(-1)
+  }
+
+  /**
+   * Session lifecycle state. Throws if sessionId is not in the store.
+   * Use `store.session.status(id)` for the lenient version that returns "idle" for unknown sessions.
+   */
+  sessionStatus(sessionId: string): DerivedSessionStatus {
+    this.requireSession(sessionId)
+    return this.getSessionStatus(sessionId)
+  }
+
+  /**
+   * Full untruncated text of the last assistant message's text parts.
+   * Returns "" if the session has no assistant messages or no text parts.
+   * Throws if sessionId is not in the store.
+   */
+  lastAssistantText(sessionId: string): string {
+    this.requireSession(sessionId)
+    const lastMsg = this.getLastAssistantMessage(sessionId)
+    if (!lastMsg) return ""
+    const parts = this.state.part[lastMsg.id] ?? []
+    return parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as Record<string, unknown>).text as string ?? "")
+      .join("")
+  }
+
+  /**
+   * Reasoning text of the last assistant message's reasoning parts.
+   * Returns "" if no reasoning parts exist.
+   * Throws if sessionId is not in the store.
+   */
+  lastAssistantReasoning(sessionId: string): string {
+    this.requireSession(sessionId)
+    const lastMsg = this.getLastAssistantMessage(sessionId)
+    if (!lastMsg) return ""
+    const parts = this.state.part[lastMsg.id] ?? []
+    return parts
+      .filter((p) => p.type === "reasoning")
+      .map((p) => (p as Record<string, unknown>).text as string ?? "")
+      .join("")
+  }
+
+  /**
+   * Retry state if session is currently in a model API retry cycle; null otherwise.
+   * Throws if sessionId is not in the store.
+   */
+  retryInfo(sessionId: string): { attempt: number; next: number; message: string } | null {
+    this.requireSession(sessionId)
+    const status = this.state.session_status[sessionId]
+    if (status?.type === "retry") {
+      return { attempt: status.attempt, next: status.next, message: status.message }
+    }
+    return null
+  }
+
+  /**
+   * Per-message cost (last assistant message) and cumulative session cost.
+   * Returns { perMessage: 0, cumulative: 0 } if no assistant messages yet.
+   * Throws if sessionId is not in the store.
+   */
+  sessionCostBreakdown(sessionId: string): { perMessage: number; cumulative: number } {
+    this.requireSession(sessionId)
+    const lastMsg = this.getLastAssistantMessage(sessionId)
+    const perMessage = lastMsg ? ((lastMsg as Record<string, unknown>).cost as number ?? 0) : 0
+    const cumulative = this.state.session_cost[sessionId] ?? 0
+    return { perMessage, cumulative }
+  }
+
+  /**
+   * Tool parts from the last assistant message whose state.status is "running" or "pending".
+   * Returns [] if no assistant messages or no active tools.
+   * Throws if sessionId is not in the store.
+   */
+  activeTools(sessionId: string): Array<Extract<Part, { type: "tool" }>> {
+    this.requireSession(sessionId)
+    const lastMsg = this.getLastAssistantMessage(sessionId)
+    if (!lastMsg) return []
+    return (this.state.part[lastMsg.id] ?? []).filter(
+      (p): p is Extract<Part, { type: "tool" }> =>
+        p.type === "tool" && (p.state.status === "running" || p.state.status === "pending")
+    )
+  }
+
+  /**
+   * Tool parts from the last assistant message whose state.status is "completed" or "error".
+   * Includes error-state tools so adapters can display tool failures.
+   * Returns [] if no assistant messages or no completed tools.
+   * Throws if sessionId is not in the store.
+   */
+  completedTools(sessionId: string): Array<Extract<Part, { type: "tool" }>> {
+    this.requireSession(sessionId)
+    const lastMsg = this.getLastAssistantMessage(sessionId)
+    if (!lastMsg) return []
+    return (this.state.part[lastMsg.id] ?? []).filter(
+      (p): p is Extract<Part, { type: "tool" }> =>
+        p.type === "tool" && (p.state.status === "completed" || p.state.status === "error")
+    )
   }
 
   private getSession(sessionID: string): Session | undefined {
@@ -687,4 +795,9 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
       title,
     }
   }
+}
+
+export function isMessageFinal(message: Message): boolean {
+  const finish = (message as Record<string, unknown>).finish as string | undefined
+  return Boolean(finish) && finish !== "tool-calls" && finish !== "unknown"
 }

@@ -15,8 +15,11 @@ import type {
   Todo,
   ToastNotification,
 } from "../types"
-import type { ConsoleRenderer } from "./renderer"
+import { ConsoleRenderer } from "./renderer"
+export { ConsoleRenderer }
 import type { SyncStore } from "../store"
+import { isMessageFinal } from "../store"
+import { formatTool } from "../render"
 
 export type DebugAdapterOptions = {
   renderer: ConsoleRenderer
@@ -99,6 +102,9 @@ export class DebugAdapter implements ChannelAdapter {
           const status = state?.status as string ?? state?.type as string ?? "pending"
           if (name === "task") {
             this.renderSubtaskTool(sessionID, state)
+          } else if (status === "completed" || status === "error") {
+            const toolPart = part as Extract<Part, { type: "tool" }>
+            this.renderer.toolFormatted(sessionID, name, status, formatTool(toolPart))
           } else {
             this.renderer.tool(sessionID, name, status)
           }
@@ -159,6 +165,7 @@ export class DebugAdapter implements ChannelAdapter {
   }
 
   async onAssistantMessageComplete(sessionID: string, message: Message, parts: Part[]): Promise<void> {
+    if (!isMessageFinal(message)) return
     const msg = message as Record<string, unknown>
     const cost = typeof msg.cost === "number" ? msg.cost : 0
     const tokens = msg.tokens as { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } } | undefined
