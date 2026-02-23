@@ -275,6 +275,12 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
   }
 
   processEvent(event: Event): void {
+    try {
+      this._processEvent(event)
+    } catch {}
+  }
+
+  private _processEvent(event: Event): void {
     switch (event.type) {
       case "server.instance.disposed":
         this.state.status = "loading"
