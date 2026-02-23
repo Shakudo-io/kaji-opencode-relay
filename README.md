@@ -239,7 +239,7 @@ store.questions(sessionID)          // QuestionRequest[]
 store.todos(sessionID)              // Todo[]
 store.sessionCost(sessionID)        // Running USD total
 store.sessionTokens(sessionID)      // { input, output, reasoning, cacheRead, cacheWrite }
-store.session.status(sessionID)     // "idle" | "working" | "compacting"
+store.session.status(sessionID)     // @deprecated — returns "idle" for unknown sessions. Use store.sessionStatus() instead.
 store.session.get(sessionID)        // Session | undefined
 store.session.sync(sdk, sessionID)  // Fetch full session data from server
 store.snapshot()                    // Deep copy of entire state
@@ -249,6 +249,128 @@ store.processEvent(event)           // Process an SSE event manually
 store.on("assistantMessage" | "assistantMessageComplete" | "permission" | "question" |
          "todo" | "sessionStatus" | "sessionCost" | "sessionError" | "toast" | "status", handler)
 ```
+
+### Derived Helpers (v0.3+)
+
+These methods throw `Error` if the sessionID is not present in the store (stricter than `session.status()` which returns `"idle"` for unknowns):
+
+```typescript
+// Session state
+store.sessionStatus(sessionID)
+// "idle" | "working" | "compacting" — throws if session not in store
+
+store.retryInfo(sessionID)
+// { attempt: number, next: number, message: string } | null
+// Non-null when the model API is in a retry cycle
+
+// Message content (untruncated — no 8-line rolling window)
+store.lastAssistantText(sessionID)      // Full text of last assistant message's text parts
+store.lastAssistantReasoning(sessionID) // Full text of last assistant message's reasoning parts
+
+// Tool state snapshots (last assistant message only)
+store.activeTools(sessionID)    // ToolPart[] with state.status "running" | "pending"
+store.completedTools(sessionID) // ToolPart[] with state.status "completed" | "error"
+
+// Cost breakdown
+store.sessionCostBreakdown(sessionID)
+// { perMessage: number, cumulative: number }
+// perMessage = last assistant message only; cumulative = full session
+```
+
+Standalone pure function (no store instance needed):
+```typescript
+import { isMessageFinal } from "kaji-opencode-relay"
+
+isMessageFinal(message)
+// true  → finish: "end_turn" | "stop"   — final text response
+// false → finish: "tool-calls"          — intermediate tool-call turn
+// false → finish: undefined             — still streaming
+```
+
+**Use `isMessageFinal` to gate completion rendering.** A turn with `finish: "tool-calls"` can have substantial text content (model reasoning written before the tool call) — don't treat it as the final response.
+
+## Render Utilities (v0.3+)
+
+```typescript
+import { formatTool, formatBashOutput, formatEditDiff, formatToolOutput,
+         formatReasoning, formatElapsed, cleanMetadata } from "kaji-opencode-relay/render"
+```
+
+`formatTool(part, opts?)` is the primary entry point — dispatches to the right formatter:
+
+```typescript
+// bash → formatBashOutput; edit/write → formatEditDiff; * → formatToolOutput
+formatTool(part)                           // auto-dispatch
+formatTool(part, { maxLines: 30 })        // override default (20)
+
+formatBashOutput(part, { maxLines: 20 }) // ```bash\n$ cmd\noutput\n```
+formatEditDiff(part)                      // 📝 **file.ts**\n```diff\n...\n```
+formatToolOutput(part)                    // **read** `path`\n```\ncontent\n```
+
+formatReasoning(text, { maxChars: 600 }) // > _truncated blockquote_
+formatElapsed(ms)                         // "5s" | "2m 30s" | "1h 5m"
+cleanMetadata(text)                       // strips task_metadata XML + background task noise
+```
+
+All functions return `""` on null/undefined input — never throw.
+
+## Observing All Sessions (Parent + Subagents)
+
+> **Important**: `HeadlessRouter` routes each session to exactly ONE adapter (1:1 mapping). Registering a second adapter in the router's `adapters` array does **not** broadcast to it — the second adapter only receives `onToast` events. To observe all sessions on a pod (including subagent child sessions), subscribe directly to store events.
+
+Child sessions run on the **same pod connection** as their parent and share the same `SyncStore`. Direct store subscriptions receive events for all sessions automatically:
+
+```typescript
+// In pod-pool.ts or wherever you create the HeadlessRouter:
+const router = new HeadlessRouter({ client, store, adapters: [primaryAdapter], logger })
+
+// Sidecar observer (receives ALL sessions including subagents):
+store.on('assistantMessage', ({ sessionID, message, parts }) => {
+  observer.onAssistantMessage(sessionID, message, parts).catch(() => {})
+})
+store.on('assistantMessageComplete', ({ sessionID, message, parts }) => {
+  observer.onAssistantMessageComplete(sessionID, message, parts).catch(() => {})
+})
+store.on('sessionStatus', ({ sessionID, status }) => {
+  observer.onSessionStatus(sessionID, status)
+})
+store.on('toast', ({ notification }) => {
+  observer.onToast(notification)
+})
+```
+
+### Subagent lifecycle
+
+Subagent sessions fire the same events as parent sessions. Their `STATUS` transitions (`idle → working → idle`) and `COMPLETE` events are distinct from the parent's. The parent session's `task` tool part carries the child session ID in `state.metadata.childSessionId`.
+
+```
+Parent:  [STATUS] working  →  [TOOL] task: pending → running  →  [STEP]
+Child:   [STATUS] idle     →  [STATUS] working  →  [TOOL] ... →  [COMPLETE]  →  [STATUS] idle
+Parent:  [TOOL] task: completed  →  [STEP]  →  [COMPLETE]  →  [STATUS] idle
+```
+
+### DEBUG_RELAY sidecar (kaji-mattermost-adapter)
+
+Set `DEBUG_RELAY=true` to attach the built-in `DebugAdapter` as a sidecar logger:
+
+```typescript
+if (process.env.DEBUG_RELAY === 'true') {
+  try {
+    const { DebugAdapter, ConsoleRenderer } = await import('kaji-opencode-relay/debug')
+    const dbg = new DebugAdapter({ renderer: new ConsoleRenderer({ color: false }), store })
+    store.on('assistantMessage', ({ sessionID, message, parts }) => {
+      dbg.onAssistantMessage(sessionID, message, parts).catch(() => {})
+    })
+    store.on('assistantMessageComplete', ({ sessionID, message, parts }) => {
+      dbg.onAssistantMessageComplete(sessionID, message, parts).catch(() => {})
+    })
+    store.on('sessionStatus', ({ sessionID, status }) => dbg.onSessionStatus(sessionID, status))
+    store.on('toast', ({ notification }) => dbg.onToast(notification))
+  } catch (_) {}
+}
+```
+
+Zero impact on primary adapter behavior — debug sidecar is read-only stdout logging.
 
 ## Debug Adapter
 
@@ -289,12 +411,13 @@ Output:
 
 | Export | Contents |
 |--------|----------|
-| `kaji-opencode-relay` | `HeadlessClient`, `SyncStore`, `HeadlessRouter`, `createHeadless`, file utils |
+| `kaji-opencode-relay` | `HeadlessClient`, `SyncStore`, `HeadlessRouter`, `createHeadless`, `isMessageFinal`, file utils, render utilities |
 | `kaji-opencode-relay/types` | SDK type re-exports + `Logger`, `PermissionReply`, `QuestionReply`, `ToastNotification`, `DerivedSessionStatus`, `AdapterCapabilities` |
 | `kaji-opencode-relay/adapter` | `ChannelAdapter` interface |
-| `kaji-opencode-relay/store` | `SyncStore`, `TokenSummary` |
+| `kaji-opencode-relay/store` | `SyncStore`, `TokenSummary`, `isMessageFinal` |
+| `kaji-opencode-relay/render` | `formatTool`, `formatBashOutput`, `formatEditDiff`, `formatToolOutput`, `formatReasoning`, `formatElapsed`, `cleanMetadata`, `FormatBashOptions`, `FormatReasoningOptions` |
 | `kaji-opencode-relay/schemas` | Zod schemas for adapter I/O validation |
-| `kaji-opencode-relay/debug` | `DebugAdapter` |
+| `kaji-opencode-relay/debug` | `DebugAdapter`, `ConsoleRenderer` |
 
 ## Testing
 
