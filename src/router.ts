@@ -231,14 +231,19 @@ export class HeadlessRouter {
   private async handleQuestion(sessionID: string, request: QuestionRequest): Promise<void> {
     const adapter = this.getAdapter(sessionID)
     if (!adapter) {
+      this.logger.warn(`[question-relay] no adapter for session ${sessionID} — rejecting`)
       await this.rejectQuestion(sessionID, request.id)
       return
     }
     try {
+      this.logger.info(`[question-relay] waiting for adapter answer session=${sessionID} requestId=${request.id}`)
       const reply = await this.withTimeout(adapter.onQuestionRequest(sessionID, request), "question")
+      const isRejected = "rejected" in reply
+      this.logger.info(`[question-relay] adapter replied session=${sessionID} rejected=${isRejected}`)
       await this.replyQuestion(sessionID, request.id, reply)
+      this.logger.info(`[question-relay] reply sent to OpenCode session=${sessionID}`)
     } catch (error) {
-      this.logger.error("Adapter question failed", error)
+      this.logger.error(`[question-relay] adapter question FAILED session=${sessionID}`, error)
       await this.rejectQuestion(sessionID, request.id)
     }
   }
