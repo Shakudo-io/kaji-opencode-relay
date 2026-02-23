@@ -277,7 +277,10 @@ export class SyncStore extends TypedEmitter<StoreEvents> {
   processEvent(event: Event): void {
     try {
       this._processEvent(event)
-    } catch {}
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[SyncStore] processEvent crash on ${event.type}: ${msg}`, JSON.stringify(event.properties ?? {}).slice(0, 300))
+    }
   }
 
   private _processEvent(event: Event): void {
