@@ -3,7 +3,17 @@ export { TypedEmitter } from "./events"
 export { HeadlessClient } from "./client"
 export type { HeadlessClientConfig, HeadlessEventSource, ModelOverride, SessionPromptOptions } from "./client"
 export type { ChannelAdapter } from "./adapter"
-export { SyncStore, type TokenSummary } from "./store"
+export { SyncStore, type TokenSummary, isMessageFinal } from "./store"
+export {
+  cleanMetadata,
+  formatElapsed,
+  formatBashOutput,
+  formatEditDiff,
+  formatToolOutput,
+  formatReasoning,
+  formatTool,
+} from "./render"
+export type { FormatBashOptions, FormatReasoningOptions } from "./render"
 export { HeadlessRouter, type HeadlessRouterConfig } from "./router"
 export { createFilePartInput, createFilePartInputFromBuffer, detectMimeType, filePartDataSize } from "./files"
 export type { FilePartInput, CreateFilePartOptions } from "./files"

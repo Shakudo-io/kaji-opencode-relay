@@ -1,28 +1,29 @@
 {
   "name": "kaji-opencode-relay",
-  "version": "0.2.7",
+  "version": "0.3.2",
   "description": "Universal relay for OpenCode — route AI coding sessions to any channel",
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js",
-    "./types": "./dist/types.js",
-    "./adapter": "./dist/adapter.js",
-    "./store": "./dist/store.js",
-    "./schemas": "./dist/schemas.js",
-    "./debug": "./dist/debug/adapter.js"
+    ".":         { "types": "./dist/index.d.ts",          "default": "./dist/src/index.js" },
+    "./types":   { "types": "./dist/types.d.ts",           "default": "./dist/src/types.js" },
+    "./adapter": { "types": "./dist/adapter.d.ts",         "default": "./dist/src/adapter.js" },
+    "./store":   { "types": "./dist/store.d.ts",           "default": "./dist/src/store.js" },
+    "./schemas": { "types": "./dist/schemas.d.ts",         "default": "./dist/src/schemas.js" },
+    "./debug":   { "types": "./dist/debug/adapter.d.ts",   "default": "./dist/src/debug/adapter.js" },
+    "./render":  { "types": "./dist/render.d.ts",          "default": "./dist/src/render.js" }
   },
   "bin": {
     "kaji-opencode-relay-debug": "./bin/debug.ts"
   },
   "types": "./dist/index.d.ts",
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
+  "main": "./dist/src/index.js",
+  "module": "./dist/src/index.js",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting && tsc -p tsconfig.build.json && bun scripts/fix-duplicate-exports.js",
+    "build": "bun build src/index.ts src/types.ts src/adapter.ts src/store.ts src/render.ts src/schemas.ts src/debug/adapter.ts src/debug/cli.ts src/debug/renderer.ts --outdir dist --format esm --target node --external @opencode-ai/sdk --external zod --splitting && tsc -p tsconfig.build.json && bun scripts/fix-duplicate-exports.js",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepublishOnly": "bun run build"

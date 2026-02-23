@@ -188,6 +188,10 @@ export class ConsoleRenderer {
     this.render("TOOL", msg, { sessionID, tool: name, status })
   }
 
+  toolFormatted(sessionID: string, name: string, status: string, formatted: string): void {
+    this.render("TOOL", `${name}: ${status}\n${formatted}`, { sessionID, tool: name, status })
+  }
+
   permission(sessionID: string, permission: string, reply: string): void {
     this.render("PERMISSION", `${permission} → ${reply}`, { sessionID, permission, reply })
   }
