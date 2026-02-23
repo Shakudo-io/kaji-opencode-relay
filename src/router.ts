@@ -216,7 +216,6 @@ export class HeadlessRouter {
   private async handlePermission(sessionID: string, request: PermissionRequest): Promise<void> {
     const adapter = this.getAdapter(sessionID)
     if (!adapter) {
-      await this.replyPermission(sessionID, request.id, { reply: "reject" })
       return
     }
     try {
@@ -231,8 +230,6 @@ export class HeadlessRouter {
   private async handleQuestion(sessionID: string, request: QuestionRequest): Promise<void> {
     const adapter = this.getAdapter(sessionID)
     if (!adapter) {
-      this.logger.warn(`[question-relay] no adapter for session ${sessionID} — rejecting`)
-      await this.rejectQuestion(sessionID, request.id)
       return
     }
     try {
