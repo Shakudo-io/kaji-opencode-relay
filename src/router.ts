@@ -1,4 +1,4 @@
-import { noopLogger, type Logger, type Message, type MessageOrigin, type PermissionReply, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
+import { noopLogger, type Logger, type Message, type MessageOrigin, type PermissionReply, type PermissionSkip, type PermissionRequest, type QuestionReply, type QuestionRequest } from "./types"
 import type { ChannelAdapter } from "./adapter"
 import type { HeadlessClient } from "./client"
 import type { SyncStore } from "./store"
@@ -220,6 +220,10 @@ export class HeadlessRouter {
     }
     try {
       const reply = await this.withTimeout(adapter.onPermissionRequest(sessionID, request), "permission")
+      if ("skipped" in reply) {
+        this.logger.info(`[permission-relay] adapter skipped session=${sessionID} requestId=${request.id}`)
+        return
+      }
       await this.replyPermission(sessionID, request.id, reply)
     } catch (error) {
       this.logger.error("Adapter permission failed", error)
@@ -235,6 +239,10 @@ export class HeadlessRouter {
     try {
       this.logger.info(`[question-relay] waiting for adapter answer session=${sessionID} requestId=${request.id}`)
       const reply = await this.withTimeout(adapter.onQuestionRequest(sessionID, request), "question")
+      if ("skipped" in reply) {
+        this.logger.info(`[question-relay] adapter skipped session=${sessionID} requestId=${request.id}`)
+        return
+      }
       const isRejected = "rejected" in reply
       this.logger.info(`[question-relay] adapter replied session=${sessionID} rejected=${isRejected}`)
       await this.replyQuestion(sessionID, request.id, reply)
@@ -245,7 +253,8 @@ export class HeadlessRouter {
     }
   }
 
-  private async replyPermission(sessionID: string, requestID: string, reply: PermissionReply): Promise<void> {
+  private async replyPermission(sessionID: string, requestID: string, reply: PermissionReply | PermissionSkip): Promise<void> {
+    if ("skipped" in reply) return
     await this.client.permission.reply({
       sessionID,
       requestID,
@@ -257,6 +266,9 @@ export class HeadlessRouter {
   private async replyQuestion(sessionID: string, requestID: string, reply: QuestionReply): Promise<void> {
     if ("rejected" in reply) {
       await this.rejectQuestion(sessionID, requestID)
+      return
+    }
+    if ("skipped" in reply) {
       return
     }
     await this.client.question.reply({

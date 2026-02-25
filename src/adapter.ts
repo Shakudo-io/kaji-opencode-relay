@@ -6,6 +6,7 @@ import type {
   MessageOrigin,
   Part,
   PermissionReply,
+  PermissionSkip,
   PermissionRequest,
   QuestionReply,
   QuestionRequest,
@@ -23,7 +24,7 @@ export interface ChannelAdapter {
   shutdown?(): Promise<void>
   onAssistantMessage(sessionID: string, message: Message, parts: Part[]): Promise<void>
   onAssistantMessageComplete(sessionID: string, message: Message, parts: Part[]): Promise<void>
-  onPermissionRequest(sessionID: string, request: PermissionRequest): Promise<PermissionReply>
+  onPermissionRequest(sessionID: string, request: PermissionRequest): Promise<PermissionReply | PermissionSkip>
   onQuestionRequest(sessionID: string, request: QuestionRequest): Promise<QuestionReply>
   onSessionStatus(sessionID: string, status: DerivedSessionStatus): void
   onTodoUpdate(sessionID: string, todos: Todo[]): void

@@ -17,7 +17,7 @@ export type { FormatBashOptions, FormatReasoningOptions } from "./render"
 export { HeadlessRouter, type HeadlessRouterConfig } from "./router"
 export { createFilePartInput, createFilePartInputFromBuffer, detectMimeType, filePartDataSize } from "./files"
 export type { FilePartInput, CreateFilePartOptions } from "./files"
-export type { MessageOrigin, FileAttachmentInfo, ReactionInfo, SessionInfo, Logger, SSEEvent, DerivedSessionStatus, PermissionReply, QuestionReply, ToastNotification, AdapterCapabilities } from "./types"
+export type { MessageOrigin, FileAttachmentInfo, ReactionInfo, SessionInfo, Logger, SSEEvent, DerivedSessionStatus, PermissionReply, PermissionSkip, QuestionReply, QuestionSkip, ToastNotification, AdapterCapabilities } from "./types"
 export { noopLogger } from "./types"
 export { PermissionReplySchema, QuestionReplySchema, ToastNotificationSchema, AdapterCapabilitiesSchema, HeadlessClientConfigSchema } from "./schemas"
 

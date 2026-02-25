@@ -49,7 +49,23 @@ export interface PermissionReply {
   message?: string
 }
 
-export type QuestionReply = { answers: string[][] } | { rejected: true }
+/**
+ * Returned by an adapter's onPermissionRequest when it does not own the session.
+ * The relay router will silently skip (no OpenCode call), allowing the owning
+ * adapter on the same OpenCode instance to handle the request.
+ */
+export interface PermissionSkip {
+  skipped: true
+}
+
+export type QuestionReply = { answers: string[][] } | { rejected: true } | { skipped: true }
+
+/**
+ * Use { skipped: true } instead of { rejected: true } when the adapter does not
+ * own the session. The relay router will silently return without sending any
+ * reply to OpenCode, allowing the owning adapter to respond.
+ */
+export type QuestionSkip = { skipped: true }
 
 export interface ToastNotification {
   variant: "error" | "warning" | "success" | "info"
